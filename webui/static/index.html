@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SubFury — subdomain prediction</title>
+<title>SubFury — subdomain prediction engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0b1120; --surface:#0f172a; --raised:#151f33; --line:#1f2b40; --line-2:#2b3a52;
-  --fg:#f8fafc; --fg-2:#a5b3c8; --fg-3:#6f7f96;
+  --bg:#0b1120; --surface:#0f172a; --raised:#151f33; --sunk:#080d18;
+  --line:#1f2b40; --line-2:#2b3a52;
+  --fg:#f8fafc; --fg-2:#a5b3c8; --fg-3:#7b8ba3;
   --accent:#22c55e; --accent-dim:#0d3b22; --info:#5ea9ff; --warn:#f5b545; --err:#f4626b;
   --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -18,117 +19,156 @@
   --ease:cubic-bezier(.16,1,.3,1);
 }
 *{box-sizing:border-box}
-html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);
   -webkit-font-smoothing:antialiased}
 ::selection{background:var(--accent);color:#04150b}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
 *::-webkit-scrollbar{width:10px;height:10px}
-*::-webkit-scrollbar-track{background:var(--surface)}
-*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;
-  border:2px solid var(--surface)}
+*::-webkit-scrollbar-track{background:var(--sunk)}
+*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;border:2px solid var(--sunk)}
 *::-webkit-scrollbar-thumb:hover{background:#3a4c69}
-*{scrollbar-width:thin;scrollbar-color:var(--line-2) var(--surface)}
+*{scrollbar-width:thin;scrollbar-color:var(--line-2) var(--sunk)}
+h1,h2,h3{margin:0}
+button{font-family:inherit;cursor:pointer}
 
-/* ── masthead ───────────────────────────────────────────── */
-.mast{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
-  border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:10px;font:700 15px/1 var(--mono);
-  letter-spacing:-.02em}
-.brand svg{color:var(--accent)}
-.brand em{font-style:normal;color:var(--fg-3);font-weight:400}
-.readout{display:flex;gap:var(--s5);margin-left:auto;align-items:baseline}
-.readout div{display:flex;align-items:baseline;gap:7px}
-.readout b{font:500 15px/1 var(--mono);font-variant-numeric:tabular-nums;
-  color:var(--fg);min-width:2ch}
-.readout b.live{color:var(--accent)}
-.readout span{font-size:11px;color:var(--fg-3);text-transform:uppercase;
-  letter-spacing:.08em}
-.status{display:flex;align-items:center;gap:7px;font:400 12px/1 var(--mono);
-  color:var(--fg-2)}
+/* ── model identity bar ─────────────────────────────────── */
+.identity{background:var(--surface);border-bottom:1px solid var(--line);
+  padding:var(--s3) var(--s5);display:flex;align-items:center;gap:var(--s5);flex-wrap:wrap}
+.mark{display:flex;align-items:center;gap:9px;font:700 15px/1 var(--mono);letter-spacing:-.02em}
+.mark svg{color:var(--accent)}
+.mark em{font-style:normal;color:var(--fg-3);font-weight:400}
+.spec{display:flex;gap:var(--s4);flex-wrap:wrap;align-items:baseline;
+  font:400 12px/1 var(--mono);color:var(--fg-3)}
+.spec b{color:var(--fg-2);font-weight:500}
+.spec i{font-style:normal;color:var(--line-2)}
+.idRight{margin-left:auto;display:flex;align-items:center;gap:var(--s3)}
+.linkbtn{background:none;border:1px solid var(--line-2);color:var(--fg-2);
+  border-radius:6px;padding:0 12px;min-height:34px;font-size:12px;font-weight:500;
+  display:inline-flex;align-items:center;
+  transition:border-color .15s var(--ease),color .15s var(--ease)}
+.linkbtn:hover{border-color:var(--accent);color:var(--accent)}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--fg-3);flex:none}
 .dot.ok{background:var(--accent);box-shadow:0 0 0 3px rgba(34,197,94,.16)}
 .dot.bad{background:var(--err);box-shadow:0 0 0 3px rgba(244,98,107,.16)}
-.dot.busy{background:var(--info);animation:pulse 1.4s var(--ease) infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.dot.busy{background:var(--info);animation:pulse 1.3s var(--ease) infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.devtag{font:400 12px/1 var(--mono);color:var(--fg-2)}
 
-/* ── shell ──────────────────────────────────────────────── */
-.shell{display:grid;grid-template-columns:312px minmax(0,1fr);gap:var(--s5);
-  padding:var(--s5);align-items:start;max-width:1600px;margin:0 auto}
-@media(max-width:900px){.shell{grid-template-columns:1fr;padding:var(--s4);gap:var(--s4)}}
-@media(max-width:640px){
-  .mast{padding:var(--s3) var(--s4);gap:var(--s3)}
-  .readout{margin-left:0;width:100%;gap:var(--s4);justify-content:space-between}
-  .readout span{letter-spacing:.04em}
-  .results{min-height:340px}
-}
+/* ── layout ─────────────────────────────────────────────── */
+.page{display:grid;grid-template-columns:224px minmax(0,1fr);gap:0;
+  min-height:calc(100vh - 53px)}
+.page > *{min-width:0}
+@media(max-width:1000px){.page{grid-template-columns:1fr}}
 
-/* ── console (left) ─────────────────────────────────────── */
-.console{background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  padding:var(--s5) var(--s4) var(--s4);position:sticky;top:var(--s5)}
-@media(max-width:900px){.console{position:static}}
-.console h2{margin:0 0 var(--s4);font:600 12px/1 var(--sans);color:var(--fg-3);
-  text-transform:uppercase;letter-spacing:.1em}
-label{display:block;font-size:12px;color:var(--fg-2);margin:var(--s4) 0 6px;
-  font-weight:500}
-label:first-of-type{margin-top:0}
-.hint{font-size:11px;color:var(--fg-3);margin-top:5px;line-height:1.45}
-input,textarea{width:100%;background:var(--bg);color:var(--fg);
-  border:1px solid var(--line-2);border-radius:7px;padding:9px 11px;
-  font:400 13px/1.5 var(--mono);transition:border-color .15s var(--ease),
-  box-shadow .15s var(--ease)}
+/* ── stage rail ─────────────────────────────────────────── */
+.rail{border-right:1px solid var(--line);padding:var(--s5) var(--s4);
+  background:var(--sunk);position:sticky;top:0;align-self:start}
+@media(max-width:1000px){.rail{position:static;border-right:none;
+  border-bottom:1px solid var(--line);display:flex;gap:var(--s2);overflow-x:auto;
+  padding:var(--s3) var(--s4);min-width:0;
+  scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .rail .stage{scroll-snap-align:start}}
+.railTitle{font:600 11px/1 var(--sans);color:var(--fg-3);text-transform:uppercase;
+  letter-spacing:.11em;margin-bottom:var(--s4)}
+@media(max-width:1000px){.railTitle{display:none}}
+.stage{display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-radius:7px;
+  background:none;border:1px solid transparent;width:100%;text-align:left;
+  transition:background .15s var(--ease),border-color .15s var(--ease)}
+@media(max-width:1000px){.stage{white-space:nowrap;width:auto;flex:none}}
+.stage:hover{background:var(--raised)}
+.stage[aria-current="true"]{background:var(--raised);border-color:var(--line-2)}
+.stage .n{width:19px;height:19px;border-radius:50%;border:1px solid var(--line-2);
+  color:var(--fg-3);font:500 10px/17px var(--mono);text-align:center;flex:none;
+  transition:all .2s var(--ease)}
+.stage.done .n{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
+.stage.active .n{background:var(--info);border-color:var(--info);color:#04121f}
+.stage .lb{font-size:12.5px;color:var(--fg-2);font-weight:500;line-height:1.35}
+.stage[aria-current="true"] .lb{color:var(--fg)}
+.stage .sub{display:block;font:400 11px/1.4 var(--mono);color:var(--fg-3);margin-top:2px}
+@media(max-width:1000px){.stage .sub{display:none}}
+
+/* ── main ───────────────────────────────────────────────── */
+main{padding:var(--s5);max-width:1180px;width:100%}
+@media(max-width:1000px){main{padding:var(--s4)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  margin-bottom:var(--s4);overflow:hidden}
+.phead{display:flex;align-items:center;gap:var(--s3);padding:var(--s4) var(--s4);
+  border-bottom:1px solid var(--line)}
+.phead h2{font:600 13px/1 var(--sans);letter-spacing:.01em}
+.phead .step{font:500 10px/1 var(--mono);color:var(--fg-3);border:1px solid var(--line-2);
+  padding:4px 7px;border-radius:20px}
+.phead .meta{margin-left:auto;font:400 12px/1 var(--mono);color:var(--fg-3)}
+.pbody{padding:var(--s4)}
+.pbody.flush{padding:0}
+
+label{display:block;font-size:12px;color:var(--fg-2);margin-bottom:6px;font-weight:500}
+.hint{font-size:11.5px;color:var(--fg-3);margin:6px 0 0;line-height:1.5}
+input[type=text],input[type=number],textarea{width:100%;background:var(--sunk);
+  color:var(--fg);border:1px solid var(--line-2);border-radius:7px;padding:9px 11px;
+  font:400 13px/1.5 var(--mono);transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
 input::placeholder,textarea::placeholder{color:var(--fg-3)}
 input:hover,textarea:hover{border-color:#38496a}
 input:focus,textarea:focus{outline:none;border-color:var(--accent);
   box-shadow:0 0 0 3px rgba(34,197,94,.14)}
-input[aria-invalid="true"]{border-color:var(--err)}
-textarea{min-height:96px;resize:vertical}
-.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
-.toggle{display:flex;align-items:center;gap:10px;margin-top:var(--s4);
-  padding:10px 11px;background:var(--bg);border:1px solid var(--line);
-  border-radius:7px;cursor:pointer;transition:border-color .15s var(--ease)}
-.toggle:hover{border-color:var(--line-2)}
-.toggle input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:none}
-.toggle span{font-size:12.5px;color:var(--fg-2)}
-.actions{display:flex;gap:var(--s2);margin-top:var(--s5)}
-button{font:600 13px/1 var(--sans);border-radius:7px;cursor:pointer;
-  border:1px solid transparent;padding:11px 14px;display:inline-flex;
-  align-items:center;justify-content:center;gap:7px;
+input[aria-invalid=true]{border-color:var(--err)}
+textarea{min-height:88px;resize:vertical}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s3)}
+@media(max-width:620px){.grid2,.grid3{grid-template-columns:1fr}}
+.seedRow{display:flex;gap:var(--s2);margin-top:var(--s3);flex-wrap:wrap}
+.chip{background:var(--raised);border:1px solid var(--line-2);color:var(--fg-2);
+  border-radius:6px;padding:0 12px;min-height:36px;font:500 12px/1 var(--sans);
+  display:inline-flex;align-items:center;
+  transition:border-color .15s var(--ease),color .15s var(--ease)}
+.chip:hover{border-color:var(--info);color:var(--info)}
+.chip:disabled{opacity:.45;cursor:not-allowed}
+.toggle{display:flex;align-items:center;gap:9px;padding:10px 11px;background:var(--sunk);
+  border:1px solid var(--line);border-radius:7px;cursor:pointer;font-size:12.5px;
+  color:var(--fg-2)}
+.toggle input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+.runbar{display:flex;gap:var(--s2);align-items:center;margin-top:var(--s4)}
+.btn{border-radius:7px;border:1px solid transparent;padding:11px 16px;
+  font:600 13px/1 var(--sans);display:inline-flex;align-items:center;gap:7px;
   transition:background .15s var(--ease),border-color .15s var(--ease),
   color .15s var(--ease),transform .1s var(--ease)}
-button:active:not(:disabled){transform:translateY(1px)}
-button:disabled{opacity:.42;cursor:not-allowed}
-.btn-go{flex:1;background:var(--accent);color:#04150b}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.btn-go{background:var(--accent);color:#04150b}
 .btn-go:hover:not(:disabled){background:#38d873}
-.btn-stop{background:transparent;border-color:var(--line-2);color:var(--fg-2)}
-.btn-stop:hover:not(:disabled){border-color:var(--err);color:var(--err)}
-.notice{margin-top:var(--s4);padding:10px 12px;border-radius:7px;
+.btn-mute{background:transparent;border-color:var(--line-2);color:var(--fg-2)}
+.btn-mute:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+.kbd{margin-left:auto;font:400 11px/1 var(--mono);color:var(--fg-3)}
+.kbd b{border:1px solid var(--line-2);border-radius:4px;padding:3px 5px;font-weight:400}
+.notice{margin-top:var(--s4);padding:10px 12px;border-radius:7px;display:flex;gap:9px;
   background:rgba(245,181,69,.07);border:1px solid rgba(245,181,69,.22);
-  font-size:11.5px;line-height:1.5;color:#e5c07b;display:flex;gap:9px}
+  font-size:11.5px;line-height:1.5;color:#e5c07b}
 .notice svg{flex:none;margin-top:1px;color:var(--warn)}
 
-/* ── results (right) ────────────────────────────────────── */
-.results{background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  overflow:hidden;min-height:520px;display:flex;flex-direction:column}
-.tabs{display:flex;gap:var(--s1);padding:var(--s3) var(--s4) 0;
-  border-bottom:1px solid var(--line)}
-.tabs button{background:none;border:none;border-bottom:2px solid transparent;
-  border-radius:0;padding:9px 13px;color:var(--fg-3);font-weight:500;font-size:13px}
-.tabs button:hover{color:var(--fg-2)}
-.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
-.tabs .count{font:500 11px/1 var(--mono);background:var(--raised);color:var(--fg-2);
-  padding:3px 6px;border-radius:20px;font-variant-numeric:tabular-nums}
-.pane{display:none;flex:1;overflow:auto;max-height:64vh}
-.pane[data-on]{display:block}
+/* conditioning view */
+.seq{font:400 12.5px/2.1 var(--mono);background:var(--sunk);border:1px solid var(--line);
+  border-radius:7px;padding:var(--s3);word-break:break-all}
+.tk{background:var(--raised);border:1px solid var(--line-2);border-radius:4px;
+  padding:2px 6px;margin:0 2px;color:var(--fg-2)}
+.tk.sp{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);
+  font-weight:500}
+.tk.dl{background:rgba(94,169,255,.14);border-color:var(--info);color:var(--info);
+  font-weight:500}
+.tokline{display:flex;gap:var(--s3);align-items:baseline;padding:7px 0;
+  border-bottom:1px solid rgba(31,43,64,.6);font:400 12.5px/1.5 var(--mono)}
+.tokline:last-child{border-bottom:none}
+.tokline .lb{color:var(--fg);min-width:12ch;font-weight:500}
+
+/* tables */
+.scroll{overflow:auto;max-height:52vh}
 table{width:100%;border-collapse:collapse}
 th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:left;
   font:500 11px/1 var(--sans);color:var(--fg-3);text-transform:uppercase;
-  letter-spacing:.07em;padding:11px var(--s4);border-bottom:1px solid var(--line);
+  letter-spacing:.07em;padding:10px var(--s4);border-bottom:1px solid var(--line);
   white-space:nowrap}
-td{padding:9px var(--s4);border-bottom:1px solid rgba(31,43,64,.6);
-  font:400 13px/1.45 var(--mono);font-variant-numeric:tabular-nums}
-tbody tr{animation:row .34s var(--ease) both}
-@keyframes row{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+td{padding:8px var(--s4);border-bottom:1px solid rgba(31,43,64,.55);
+  font:400 12.5px/1.45 var(--mono);font-variant-numeric:tabular-nums}
+tbody tr{animation:row .3s var(--ease) both}
+@keyframes row{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 tbody tr:hover td{background:var(--raised)}
 td.host{color:var(--fg);font-weight:500}
 td.host mark{background:none;color:var(--accent);font-weight:700}
@@ -136,315 +176,586 @@ td.ip{color:var(--info)}
 td.num{color:var(--fg-3);width:1%;white-space:nowrap}
 td.rank{color:var(--fg-3);width:1%;text-align:right;padding-right:0}
 .meter{display:block;height:3px;border-radius:2px;background:var(--line);
-  overflow:hidden;width:140px;max-width:100%}
-.meter i{display:block;height:100%;background:var(--info);border-radius:2px;
-  transition:width .3s var(--ease)}
+  overflow:hidden;width:130px;max-width:100%}
+.meter i{display:block;height:100%;background:var(--info);border-radius:2px}
 td:has(.meter){width:1%}
-.pill{font:500 11px/1 var(--mono);padding:3px 7px;border-radius:5px;
-  background:var(--accent-dim);color:var(--accent);white-space:nowrap}
 .empty{padding:var(--s6) var(--s5);text-align:center;color:var(--fg-3)}
 .empty svg{color:var(--line-2);margin-bottom:var(--s3)}
-.empty p{margin:0;font-size:13px;max-width:46ch;margin-inline:auto;line-height:1.6}
+.empty p{margin:0;font-size:13px;max-width:48ch;margin-inline:auto;line-height:1.6}
 .empty p b{color:var(--fg-2);font-weight:500}
+
+/* metrics */
+.metrics{display:flex;gap:var(--s5);flex-wrap:wrap;padding:var(--s3) var(--s4);
+  border-bottom:1px solid var(--line);background:var(--sunk)}
+.metrics div{display:flex;align-items:baseline;gap:7px}
+.metrics b{font:500 15px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--fg)}
+.metrics b.live{color:var(--accent)}
+.metrics span{font-size:11px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.07em}
+
 #log{margin:0;padding:var(--s4);font:400 12.5px/1.75 var(--mono);color:var(--fg-2);
-  white-space:pre-wrap;word-break:break-word}
-#log .t{color:var(--fg-3)}
-#log .ok{color:var(--accent)}
-#log .er{color:var(--err)}
-#log .hd{color:var(--fg);font-weight:700}
-@media (prefers-reduced-motion:reduce){
-  *,tbody tr{animation:none!important;transition:none!important}
-}
+  white-space:pre-wrap;word-break:break-word;max-height:34vh;overflow:auto}
+#log .t{color:var(--fg-3)} #log .ok{color:var(--accent)}
+#log .er{color:var(--err)} #log .hd{color:var(--fg);font-weight:700}
+
+/* history */
+.hist{display:flex;flex-direction:column}
+.hrow{display:flex;align-items:center;gap:var(--s3);padding:10px var(--s4);
+  border-bottom:1px solid rgba(31,43,64,.55);font:400 12.5px/1 var(--mono);
+  background:none;border-left:none;border-right:none;border-top:none;width:100%;
+  text-align:left;color:var(--fg-2)}
+.hrow:hover{background:var(--raised)}
+.hrow .d{color:var(--fg);font-weight:500;min-width:16ch}
+.hrow .w{color:var(--fg-3);margin-left:auto;font-size:11.5px}
+.hrow .b{color:var(--accent);font-weight:500}
+
+/* drawer */
+dialog{border:1px solid var(--line-2);background:var(--surface);color:var(--fg);
+  border-radius:12px;padding:0;max-width:660px;width:calc(100% - 32px);
+  box-shadow:0 24px 60px -12px rgba(0,0,0,.7)}
+dialog::backdrop{background:rgba(4,8,16,.72);backdrop-filter:blur(3px)}
+.dh{display:flex;align-items:center;padding:var(--s4);border-bottom:1px solid var(--line)}
+.dh h3{font:600 14px/1 var(--sans)}
+.dh button{margin-left:auto;background:none;border:none;color:var(--fg-3);
+  font-size:20px;line-height:1;padding:0 4px}
+.dh button:hover{color:var(--fg)}
+.db{padding:var(--s4);max-height:70vh;overflow:auto}
+.db h4{margin:var(--s4) 0 var(--s2);font:600 11px/1 var(--sans);color:var(--fg-3);
+  text-transform:uppercase;letter-spacing:.09em}
+.db h4:first-child{margin-top:0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px var(--s4);
+  font:400 12.5px/1.6 var(--mono)}
+.kv dt{color:var(--fg-3)} .kv dd{margin:0;color:var(--fg-2)}
+.db p{font-size:12.5px;line-height:1.65;color:var(--fg-2);margin:0 0 var(--s3)}
+.db code{background:var(--sunk);border:1px solid var(--line);border-radius:4px;
+  padding:1px 5px;font:400 12px var(--mono);color:var(--accent)}
+.evalT{width:100%;border-collapse:collapse;font:400 12.5px var(--mono)}
+.evalT th{position:static;background:none;padding:6px 8px}
+.evalT td{padding:6px 8px;border-bottom:1px solid rgba(31,43,64,.5)}
+.evalT .g{color:var(--accent);font-weight:500}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<header class="mast">
-  <div class="brand">
+<!-- ═══ model identity — always on screen ═══ -->
+<div class="identity">
+  <div class="mark">
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+         stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
       <circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/>
       <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
     </svg>
     SubFury <em>v2</em>
   </div>
-  <div class="status"><span class="dot" id="dot"></span><span id="statusText">checking model</span></div>
-  <div class="readout">
-    <div><b id="mRound">0</b><span>round</span></div>
-    <div><b id="mCand">0</b><span>candidates</span></div>
-    <div><b id="mHits" class="live">0</b><span>resolved</span></div>
-    <div><b id="mRate">—</b><span>hit rate</span></div>
+  <div class="spec" id="spec"><span>reading model…</span></div>
+  <div class="idRight">
+    <span class="dot" id="dot"></span><span class="devtag" id="dev">—</span>
+    <button class="linkbtn" id="openCard">Engineering</button>
   </div>
-</header>
+</div>
 
-<main class="shell">
-  <!-- ── control console ── -->
-  <form class="console" id="form" autocomplete="off">
-    <h2>Target</h2>
+<div class="page">
+  <!-- ═══ pipeline rail ═══ -->
+  <nav class="rail" aria-label="Pipeline stages">
+    <div class="railTitle">Pipeline</div>
+    <button class="stage" data-go="s1" aria-current="true"><span class="n">1</span>
+      <span class="lb">Known set<span class="sub" id="r1">0 labels</span></span></button>
+    <button class="stage" data-go="s2"><span class="n">2</span>
+      <span class="lb">Tokenize<span class="sub" id="r2">idle</span></span></button>
+    <button class="stage" data-go="s3"><span class="n">3</span>
+      <span class="lb">Beam search<span class="sub" id="r3">idle</span></span></button>
+    <button class="stage" data-go="s4"><span class="n">4</span>
+      <span class="lb">DNS resolve<span class="sub" id="r4">idle</span></span></button>
+    <button class="stage" data-go="s5"><span class="n">5</span>
+      <span class="lb">Recurse<span class="sub" id="r5">idle</span></span></button>
+    <button class="stage" data-go="s6"><span class="n">6</span>
+      <span class="lb">Export<span class="sub" id="r6">idle</span></span></button>
+  </nav>
 
-    <label for="domain">Apex domain</label>
-    <input id="domain" name="domain" placeholder="example.com" spellcheck="false"
-           aria-describedby="domainHint">
-    <p class="hint" id="domainHint">The zone you are authorized to enumerate.</p>
-
-    <label for="known">Known subdomains</label>
-    <textarea id="known" name="known" spellcheck="false"
-      placeholder="www&#10;api&#10;dev"></textarea>
-    <p class="hint">One label per line. The model predicts from these — more
-      context yields sharper predictions.</p>
-
-    <div class="pair">
-      <div>
-        <label for="topn">Candidates</label>
-        <input id="topn" type="number" value="100" min="10" max="1000" step="10">
+  <main>
+    <!-- ── 1. known set ── -->
+    <section class="panel" id="s1">
+      <div class="phead"><span class="step">01</span><h2>Known set</h2>
+        <span class="meta" id="m1">what the model conditions on</span></div>
+      <div class="pbody">
+        <div class="grid2">
+          <div>
+            <label for="domain">Apex domain</label>
+            <input type="text" id="domain" placeholder="example.com" spellcheck="false">
+            <p class="hint">The zone you are authorized to enumerate.</p>
+          </div>
+          <div>
+            <label for="known">Known subdomain labels</label>
+            <textarea id="known" spellcheck="false" placeholder="www&#10;api&#10;dev"></textarea>
+            <div class="seedRow">
+              <button class="chip" id="seedCrt" type="button">Seed from crt.sh</button>
+              <button class="chip" type="button" onclick="document.getElementById('file').click()">Import file</button>
+              <input type="file" id="file" accept=".txt,.csv,text/plain" hidden>
+              <button class="chip" id="clearKnown" type="button">Clear</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid3" style="margin-top:var(--s4)">
+          <div><label for="topn">Candidates / round</label>
+            <input type="number" id="topn" value="100" min="10" max="1000" step="10"></div>
+          <div><label for="beams">Beam width</label>
+            <input type="number" id="beams" value="64" min="8" max="256" step="8"></div>
+          <div><label for="rec">Recursion rounds</label>
+            <input type="number" id="rec" value="3" min="1" max="10"></div>
+        </div>
+        <label class="toggle" for="resolve" style="margin-top:var(--s4)">
+          <input type="checkbox" id="resolve" checked>
+          Validate candidates over DNS</label>
+        <div class="runbar">
+          <button class="btn btn-go" id="run">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/></svg>
+            <span id="runLabel">Run pipeline</span></button>
+          <button class="btn btn-mute" id="stop" disabled>Stop</button>
+          <span class="kbd"><b>⌘</b>/<b>Ctrl</b> + <b>↵</b></span>
+        </div>
+        <p class="notice">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 9v4.5M12 17h.01"/><path d="M10.3 3.9 2.4 17.4A2 2 0 0 0 4.1 20.4h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          DNS validation and crt.sh seeding send live queries. Only use them against
+          domains you are authorized to test.</p>
       </div>
-      <div>
-        <label for="beams">Beam width</label>
-        <input id="beams" type="number" value="64" min="8" max="256" step="8">
+    </section>
+
+    <!-- ── 2. tokenize ── -->
+    <section class="panel" id="s2">
+      <div class="phead"><span class="step">02</span><h2>Tokenize &amp; condition</h2>
+        <span class="meta" id="m2">the exact sequence the model receives</span></div>
+      <div class="pbody" id="b2">
+        <div class="empty" style="padding:var(--s5)">
+          <p>Enter known labels above — the conditioned prefix appears here as you type.</p>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <label for="rec">Recursion rounds</label>
-    <input id="rec" type="number" value="3" min="1" max="10">
-    <p class="hint">Resolved hits are fed back as context for the next round.</p>
-
-    <label class="toggle" for="resolve">
-      <input type="checkbox" id="resolve" checked>
-      <span>Validate candidates over DNS</span>
-    </label>
-
-    <div class="actions">
-      <button type="submit" class="btn-go" id="run">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/>
-        </svg>
-        <span id="runLabel">Run prediction</span>
-      </button>
-      <button type="button" class="btn-stop" id="stop" disabled>Stop</button>
-    </div>
-
-    <p class="notice">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
-        <path d="M12 9v4.5M12 17h.01"/><path d="M10.3 3.9 2.4 17.4A2 2 0 0 0 4.1 20.4h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
-      </svg>
-      DNS validation sends live queries. Only run it against domains you are
-      authorized to test.
-    </p>
-  </form>
-
-  <!-- ── results ── -->
-  <section class="results">
-    <div class="tabs" role="tablist">
-      <button role="tab" aria-selected="true" aria-controls="pHits" id="tHits">
-        Resolved <span class="count" id="cHits">0</span></button>
-      <button role="tab" aria-selected="false" aria-controls="pCand" id="tCand">
-        Candidates <span class="count" id="cCand">0</span></button>
-      <button role="tab" aria-selected="false" aria-controls="pLog" id="tLog">
-        Activity</button>
-    </div>
-
-    <div class="pane" data-on id="pHits" role="tabpanel" aria-labelledby="tHits">
-      <div class="empty" id="eHits">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M2 12h20"/><circle cx="12" cy="12" r="10"/>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        </svg>
-        <p>Nothing resolved yet. Enter an apex domain and the subdomains you
-           already know, then <b>run a prediction</b>.</p>
+    <!-- ── 3. beam search ── -->
+    <section class="panel" id="s3">
+      <div class="phead"><span class="step">03</span><h2>Beam search</h2>
+        <span class="meta" id="m3">ranked by log-probability</span></div>
+      <div class="pbody flush">
+        <div class="empty" id="e3">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h9"/></svg>
+          <p>Candidates appear here as the model generates them.</p></div>
+        <div class="scroll"><table hidden id="t3">
+          <thead><tr><th class="rank">#</th><th>Label</th><th>Log-prob</th>
+            <th>Relative</th><th>Round</th></tr></thead>
+          <tbody id="b3"></tbody></table></div>
       </div>
-      <table hidden id="hitsT">
-        <thead><tr><th>Subdomain</th><th>A record</th><th>Round</th></tr></thead>
-        <tbody id="hitsB"></tbody>
-      </table>
-    </div>
+    </section>
 
-    <div class="pane" id="pCand" role="tabpanel" aria-labelledby="tCand">
-      <div class="empty" id="eCand">
-        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 6h16M4 12h16M4 18h9"/>
-        </svg>
-        <p>Beam-search candidates appear here, ranked by log-probability.</p>
+    <!-- ── 4+5. resolve & recurse ── -->
+    <section class="panel" id="s4">
+      <div class="phead"><span class="step">04 · 05</span><h2>DNS resolve &amp; recurse</h2>
+        <span class="meta" id="m4">hits rejoin the known set</span></div>
+      <div class="metrics">
+        <div><b id="kRound">0</b><span>round</span></div>
+        <div><b id="kCand">0</b><span>candidates</span></div>
+        <div><b id="kHits" class="live">0</b><span>resolved</span></div>
+        <div><b id="kRate">—</b><span>hit rate</span></div>
       </div>
-      <table hidden id="candT">
-        <thead><tr><th class="rank">#</th><th>Label</th><th>Log-prob</th>
-          <th>Confidence</th></tr></thead>
-        <tbody id="candB"></tbody>
-      </table>
-    </div>
+      <div class="pbody flush">
+        <div class="empty" id="e4">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.3" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <p>Nothing resolved yet. Fill in the known set and <b>run the pipeline</b>.</p></div>
+        <div class="scroll"><table hidden id="t4">
+          <thead><tr><th>Subdomain</th><th>A record</th><th>Found in round</th></tr></thead>
+          <tbody id="b4"></tbody></table></div>
+      </div>
+    </section>
 
-    <div class="pane" id="pLog" role="tabpanel" aria-labelledby="tLog">
+    <!-- ── activity ── -->
+    <section class="panel" id="s5">
+      <div class="phead"><span class="step">log</span><h2>Activity</h2></div>
       <pre id="log"><span class="t">idle — awaiting run.</span></pre>
-    </div>
-  </section>
-</main>
+    </section>
+
+    <!-- ── 6. export + history ── -->
+    <section class="panel" id="s6">
+      <div class="phead"><span class="step">06</span><h2>Export &amp; history</h2>
+        <span class="meta" id="m6">runs are kept in this browser</span></div>
+      <div class="pbody">
+        <div class="seedRow" style="margin-top:0">
+          <button class="chip" id="xTxt" disabled>Copy as list</button>
+          <button class="chip" id="xJson" disabled>Download JSON</button>
+          <button class="chip" id="xCsv" disabled>Download CSV</button>
+        </div>
+        <p class="hint">Plain list pipes straight into httpx, nuclei, or dnsx.</p>
+      </div>
+      <div class="hist" id="hist"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ═══ engineering drawer ═══ -->
+<dialog id="card">
+  <div class="dh"><h3>Model &amp; engineering</h3><button id="closeCard" aria-label="Close">×</button></div>
+  <div class="db" id="cardBody"></div>
+</dialog>
 
 <script>
 const $ = i => document.getElementById(i);
-let ctrl = null, hits = 0, cands = 0, tested = 0;
+let ctrl = null, hits = [], cands = 0, tested = 0, curDomain = '', model = null;
 
-/* tabs */
-const tabs = [['tHits','pHits'],['tCand','pCand'],['tLog','pLog']];
-tabs.forEach(([t,p]) => $(t).onclick = () => {
-  tabs.forEach(([t2,p2]) => {
-    $(t2).setAttribute('aria-selected', String(t2 === t));
-    $(p2).toggleAttribute('data-on', p2 === p);
-  });
-});
-
-/* model status */
-fetch('/api/status').then(r => r.json()).then(s => {
-  if (!s.model_available) {
-    $('dot').className = 'dot bad';
-    $('statusText').textContent = 'no checkpoint — run train.py';
-    $('run').disabled = true;
-  } else {
-    $('dot').className = 'dot ok';
-    $('statusText').textContent = s.model_loaded
-      ? `${s.params_m}M params · ${s.device}` : 'model ready';
+/* ── model identity ─────────────────────────────────── */
+fetch('/api/model').then(r => r.json()).then(m => {
+  model = m;
+  if (!m.available) {
+    $('dot').className = 'dot bad'; $('dev').textContent = 'no checkpoint';
+    $('spec').innerHTML = '<span>train a model first — see README</span>';
+    $('run').disabled = true; return;
   }
+  $('dot').className = 'dot ok'; $('dev').textContent = m.device;
+  $('spec').innerHTML = [
+    `<span><b>${(m.params/1e6).toFixed(1)}M</b> params</span>`,
+    `<i>·</i><span><b>${m.n_layer}</b>L <b>${m.n_head}</b>H <b>${m.n_embd}</b>d</span>`,
+    `<i>·</i><span>vocab <b>${m.vocab_size}</b> BPE</span>`,
+    `<i>·</i><span>trained on <b>${(m.train_apexes||0).toLocaleString()}</b> apexes</span>`,
+    `<i>·</i><span>recall@100 <b>0.224</b> vs 0.086</span>`,
+  ].join('');
 }).catch(() => {
-  $('dot').className = 'dot bad';
-  $('statusText').textContent = 'backend offline';
+  $('dot').className = 'dot bad'; $('dev').textContent = 'backend offline';
 });
 
-function stamp() {
-  return new Date().toLocaleTimeString('en-GB', {hour12: false});
+$('openCard').onclick = () => { renderCard(); $('card').showModal(); };
+$('closeCard').onclick = () => $('card').close();
+
+function renderCard() {
+  const m = model;
+  if (!m || !m.available) { $('cardBody').innerHTML = '<p>No model loaded.</p>'; return; }
+  const rows = m.eval.points.map(p => `<tr><td>N=${p.n}</td>
+    <td class="g">${p.model.toFixed(3)}</td><td>${p.baseline.toFixed(3)}</td>
+    <td class="g">+${Math.round((p.model-p.baseline)/p.baseline*100)}%</td></tr>`).join('');
+  $('cardBody').innerHTML = `
+    <h4>What this model is</h4>
+    <p>A ${(m.params/1e6).toFixed(1)}M-parameter ${m.architecture}, trained
+    <b>from scratch</b> on subdomain data — not a fine-tuned general LM. Subdomain
+    labels are non-linguistic, so a pretrained English model's priors are wasted and
+    its tokenizer fragments them.</p>
+    <h4>Architecture</h4>
+    <dl class="kv">
+      <dt>layers / heads</dt><dd>${m.n_layer} / ${m.n_head}</dd>
+      <dt>embedding dim</dt><dd>${m.n_embd}</dd>
+      <dt>context</dt><dd>${m.block_size} tokens</dd>
+      <dt>vocabulary</dt><dd>${m.vocab_size} — ${m.tokenizer}</dd>
+      <dt>parameters</dt><dd>${m.params.toLocaleString()} (embedding tied to head)</dd>
+      <dt>device</dt><dd>${m.device}</dd>
+      ${m.val_loss ? `<dt>val loss</dt><dd>${m.val_loss} @ step ${m.train_step}</dd>` : ''}
+    </dl>
+    <h4>Training objective</h4>
+    <p>Sequences are shaped <code>${m.objective}</code>. Loss applies
+    <b>only to the target</b>, so the model is never rewarded for repeating its input —
+    only for inferring a member of the set it has not been shown. Which labels count as
+    "known" versus "target" is re-sampled every epoch, so one apex yields many
+    supervision pairs.</p>
+    <h4>Data</h4>
+    <p>Hostnames from the Common Crawl host-level webgraph, grouped by apex domain
+    (public-suffix aware): <b>${(m.train_apexes||0).toLocaleString()}</b> training apexes,
+    <b>${(m.test_apexes||0).toLocaleString()}</b> held out for evaluation.</p>
+    <h4>Decoding</h4>
+    <p>${m.decoding[0].toUpperCase()+m.decoding.slice(1)} — you want the <i>N most
+    probable</i> labels to spend a finite DNS budget on, not diverse samples.</p>
+    <h4>Measured performance</h4>
+    <p>${m.eval.metric}. Both methods get an identical candidate budget; no DNS involved.</p>
+    <table class="evalT"><thead><tr><th>Budget</th><th>SubFury</th><th>Wordlist</th>
+      <th>Gain</th></tr></thead><tbody>${rows}</tbody></table>
+    <h4>Known limitation</h4>
+    <p>Training data is the Common Crawl <b>web</b> graph — crawlable public sites.
+    Internal infrastructure hostnames are underrepresented, so infra-flavored seeds
+    drift toward generic web labels. Passive DNS or Certificate Transparency corpora
+    would fix this.</p>`;
 }
+
+/* ── stage rail ─────────────────────────────────────── */
+const RAIL = ['s1','s2','s3','s4','s5','s6'];
+document.querySelectorAll('.stage').forEach(b => b.onclick = () => {
+  $(b.dataset.go).scrollIntoView({behavior:'smooth', block:'start'});
+});
+function railState(i, cls, sub) {
+  const el = document.querySelectorAll('.stage')[i];
+  if (cls) { el.classList.remove('active','done'); el.classList.add(cls); }
+  if (sub !== undefined) $('r' + (i+1)).textContent = sub;
+}
+function railReset() {
+  document.querySelectorAll('.stage').forEach(s => s.classList.remove('active','done'));
+  ['idle','idle','idle','idle','idle'].forEach((v,i) => $('r'+(i+2)).textContent = v);
+}
+const io = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting) {
+    const i = RAIL.indexOf(e.target.id);
+    document.querySelectorAll('.stage').forEach((s,n) =>
+      s.setAttribute('aria-current', String(n === i)));
+  }
+}), {rootMargin:'-45% 0px -50% 0px'});
+RAIL.forEach(id => io.observe($(id)));
+
+/* ── stage 2: live conditioning preview ─────────────── */
+let tkTimer;
+function knownLabels() {
+  return $('known').value.split('\n').map(s => s.trim().toLowerCase()).filter(Boolean);
+}
+function previewTokens() {
+  const k = knownLabels();
+  $('r1').textContent = k.length + (k.length === 1 ? ' label' : ' labels');
+  if (!k.length) {
+    $('b2').innerHTML = '<div class="empty" style="padding:var(--s5)"><p>Enter known labels above — the conditioned prefix appears here as you type.</p></div>';
+    railState(1, '', 'idle'); return;
+  }
+  fetch('/api/tokenize', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({known: k})}).then(r => r.json()).then(d => {
+    const seq = d.sequence.map(t =>
+      t === '[SEP]' ? '<span class="tk sp">[SEP]</span>' :
+      t === '[DELIM]' ? '<span class="tk dl">[DELIM]</span>' :
+      `<span class="tk">${esc(t)}</span>`).join('');
+    const lines = d.labels.map(l =>
+      `<div class="tokline"><span class="lb">${esc(l.label)}</span>
+       <span>${l.tokens.map(t => `<span class="tk">${esc(t)}</span>`).join('')}</span>
+       <span style="color:var(--fg-3);margin-left:auto">${l.ids.length}
+       token${l.ids.length===1?'':'s'}</span></div>`).join('');
+    $('b2').innerHTML =
+      `<label>Per-label tokenization</label>${lines}
+       <label style="margin-top:var(--s4)">Conditioned prefix — what the model sees</label>
+       <div class="seq">${seq}</div>
+       <p class="hint"><b style="color:var(--fg-2)">[DELIM]</b> marks where the known
+        set ends. Everything the model generates after it is a prediction; training
+        applied loss only there.</p>`;
+    $('m2').textContent = d.length + ' tokens';
+    railState(1, 'done', d.length + ' tokens');
+  }).catch(() => {});
+}
+$('known').addEventListener('input', () => {
+  clearTimeout(tkTimer); tkTimer = setTimeout(previewTokens, 260);
+});
+
+/* ── seeding & import ───────────────────────────────── */
+$('seedCrt').onclick = async () => {
+  const d = $('domain').value.trim().toLowerCase();
+  if (!d) { $('domain').focus(); return; }
+  const btn = $('seedCrt'); btn.disabled = true; btn.textContent = 'querying crt.sh…';
+  try {
+    const r = await (await fetch('/api/seed?domain=' + encodeURIComponent(d))).json();
+    if (r.ok && r.labels.length) {
+      const merged = [...new Set([...knownLabels(), ...r.labels])];
+      $('known').value = merged.join('\n');
+      previewTokens(); log(`seeded ${r.labels.length} labels from crt.sh`, 'ok');
+    } else log(r.error || 'crt.sh returned nothing for this domain', 'er');
+  } catch (e) { log('crt.sh request failed: ' + e.message, 'er'); }
+  btn.disabled = false; btn.textContent = 'Seed from crt.sh';
+};
+$('file').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => {
+    const d = $('domain').value.trim().toLowerCase();
+    const labs = t.split(/[\n,]/).map(s => s.trim().toLowerCase())
+      .map(s => d && s.endsWith('.' + d) ? s.slice(0, -d.length - 1) : s)
+      .filter(s => s && /^[a-z0-9.-]+$/.test(s));
+    $('known').value = [...new Set([...knownLabels(), ...labs])].join('\n');
+    previewTokens(); log(`imported ${labs.length} labels from ${f.name}`, 'ok');
+  });
+};
+$('clearKnown').onclick = () => { $('known').value = ''; previewTokens(); };
+
+/* ── logging ────────────────────────────────────────── */
 function log(msg, cls) {
   const el = $('log');
   if (el.dataset.clean !== '1') { el.textContent = ''; el.dataset.clean = '1'; }
-  const line = document.createElement('span');
-  line.innerHTML = `<span class="t">${stamp()}</span>  `;
-  const body = document.createElement('span');
-  if (cls) body.className = cls;
-  body.textContent = msg;
-  line.appendChild(body);
-  el.appendChild(line);
-  el.appendChild(document.createTextNode('\n'));
-  el.scrollTop = el.scrollHeight;
+  const t = document.createElement('span');
+  t.className = 't'; t.textContent = new Date().toLocaleTimeString('en-GB',{hour12:false});
+  const b = document.createElement('span'); if (cls) b.className = cls; b.textContent = msg;
+  el.append(t, '  ', b, '\n'); el.scrollTop = el.scrollHeight;
 }
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
+/* ── run ────────────────────────────────────────────── */
 function reset() {
-  hits = 0; cands = 0; tested = 0;
-  $('hitsB').innerHTML = ''; $('candB').innerHTML = '';
-  $('hitsT').hidden = true; $('candT').hidden = true;
-  $('eHits').style.display = ''; $('eCand').style.display = '';
-  $('mRound').textContent = '0'; $('mCand').textContent = '0';
-  $('mHits').textContent = '0'; $('mRate').textContent = '—';
-  $('cHits').textContent = '0'; $('cCand').textContent = '0';
+  hits = []; cands = 0; tested = 0;
+  $('b3').innerHTML = ''; $('b4').innerHTML = '';
+  $('t3').hidden = true; $('t4').hidden = true;
+  $('e3').style.display = ''; $('e4').style.display = '';
+  ['kRound','kCand','kHits'].forEach(i => $(i).textContent = '0');
+  $('kRate').textContent = '—';
   $('log').dataset.clean = '0';
+  ['xTxt','xJson','xCsv'].forEach(i => $(i).disabled = true);
+  railReset();
 }
-
 function busy(on) {
   $('run').disabled = on; $('stop').disabled = !on;
-  $('runLabel').textContent = on ? 'Running…' : 'Run prediction';
+  $('runLabel').textContent = on ? 'Running…' : 'Run pipeline';
   $('dot').className = on ? 'dot busy' : 'dot ok';
-  if (on) $('statusText').textContent = 'predicting';
 }
 
-$('form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const domain = $('domain').value.trim().toLowerCase().replace(/^https?:\/\//, '');
-  const known = $('known').value.split('\n').map(s => s.trim()).filter(Boolean);
+async function run() {
+  const domain = $('domain').value.trim().toLowerCase().replace(/^https?:\/\//,'');
+  const known = knownLabels();
   $('domain').setAttribute('aria-invalid', String(!domain));
-  if (!domain) { $('domain').focus(); log('Enter an apex domain to continue.', 'er'); tabTo('tLog'); return; }
-  if (!known.length) { $('known').focus(); log('Enter at least one known subdomain — the model predicts from context.', 'er'); tabTo('tLog'); return; }
+  if (!domain) { $('domain').focus(); log('Enter an apex domain to continue.','er'); return; }
+  if (!known.length) { $('known').focus();
+    log('Enter at least one known subdomain — the model predicts from context.','er'); return; }
 
-  reset(); busy(true);
+  curDomain = domain; reset(); busy(true);
+  railState(0,'done', known.length + ' labels');
+  railState(1,'done', $('m2').textContent);   // tokenization already resolved
   log('run started · ' + domain, 'hd');
   ctrl = new AbortController();
-
   try {
-    const res = await fetch('/api/predict', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      signal: ctrl.signal,
-      body: JSON.stringify({domain, known,
-        topn: +$('topn').value, num_beams: +$('beams').value,
-        resolve: $('resolve').checked, max_recursion: +$('rec').value}),
-    });
+    const res = await fetch('/api/predict', {method:'POST',
+      headers:{'Content-Type':'application/json'}, signal: ctrl.signal,
+      body: JSON.stringify({domain, known, topn:+$('topn').value,
+        num_beams:+$('beams').value, resolve:$('resolve').checked,
+        max_recursion:+$('rec').value})});
     if (!res.ok) throw new Error('server returned ' + res.status);
-    const rd = res.body.getReader(), dec = new TextDecoder();
-    let buf = '';
+    const rd = res.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
-      const {done, value} = await rd.read();
-      if (done) break;
-      buf += dec.decode(value, {stream: true});
+      const {done, value} = await rd.read(); if (done) break;
+      buf += dec.decode(value,{stream:true});
       const parts = buf.split('\n\n'); buf = parts.pop();
       for (const c of parts) {
-        const ev = (c.match(/^event: (.*)$/m) || [])[1];
-        const dt = (c.match(/^data: (.*)$/m) || [])[1];
-        if (ev && dt) handle(ev, JSON.parse(dt), domain);
+        const ev = (c.match(/^event: (.*)$/m)||[])[1];
+        const dt = (c.match(/^data: (.*)$/m)||[])[1];
+        if (ev && dt) handle(ev, JSON.parse(dt));
       }
     }
-  } catch (err) {
-    if (err.name === 'AbortError') log('stopped by operator.', 'er');
-    else { log('request failed — ' + err.message, 'er'); tabTo('tLog'); }
-  } finally {
-    busy(false);
-    $('statusText').textContent = 'idle';
-  }
-});
+  } catch (e) {
+    if (e.name === 'AbortError') log('stopped by operator.','er');
+    else log('request failed — ' + e.message, 'er');
+  } finally { busy(false); }
+}
 
-function tabTo(id) { $(id).click(); }
-
-function handle(ev, d, domain) {
+let curRound = 0;
+function handle(ev, d) {
   if (ev === 'log') log(d.msg);
-  else if (ev === 'error') { log(d.msg, 'er'); tabTo('tLog'); }
+  else if (ev === 'error') log(d.msg, 'er');
   else if (ev === 'round') {
-    $('mRound').textContent = d.round;
-    log(`round ${d.round} · conditioning on ${d.known} known labels`, 'hd');
+    curRound = d.round;
+    $('kRound').textContent = d.round;
+    railState(2,'active','round ' + d.round);
+    log(`round ${d.round} · conditioning on ${d.known} known labels`,'hd');
   }
   else if (ev === 'candidates') {
-    $('eCand').style.display = 'none'; $('candT').hidden = false;
-    // scale the gauge across this batch's actual range so ranks read apart
-    const scores = d.items.map(i => i.score);
-    const hi = Math.max(...scores), lo = Math.min(...scores);
+    $('e3').style.display = 'none'; $('t3').hidden = false;
+    const sc = d.items.map(i=>i.score), hi = Math.max(...sc), lo = Math.min(...sc);
     const span = hi - lo || 1;
     const frag = document.createDocumentFragment();
     d.items.forEach(it => {
       cands++;
-      const pct = 14 + 86 * ((it.score - lo) / span);
+      const pct = 14 + 86*((it.score - lo)/span);
       const tr = document.createElement('tr');
-      tr.innerHTML =
-        `<td class="rank">${cands}</td><td class="host">${esc(it.label)}</td>` +
-        `<td class="num">${it.score.toFixed(3)}</td>` +
-        `<td><span class="meter"><i style="width:${pct}%"></i></span></td>`;
+      tr.innerHTML = `<td class="rank">${cands}</td><td class="host">${esc(it.label)}</td>
+        <td class="num">${it.score.toFixed(3)}</td>
+        <td><span class="meter"><i style="width:${pct}%"></i></span></td>
+        <td class="num">${d.round}</td>`;
       frag.appendChild(tr);
     });
-    $('candB').appendChild(frag);
-    $('mCand').textContent = cands; $('cCand').textContent = cands;
+    $('b3').appendChild(frag);
+    $('kCand').textContent = cands;
+    railState(2,'done', cands + ' generated');
+    railState(3,'active','resolving…');
     log(`${d.items.length} candidates generated`);
   }
   else if (ev === 'hit') {
-    hits++;
-    $('eHits').style.display = 'none'; $('hitsT').hidden = false;
+    hits.push({fqdn:d.fqdn, ip:d.ip, round:d.round});
+    $('e4').style.display = 'none'; $('t4').hidden = false;
+    const label = d.fqdn.slice(0, d.fqdn.length - curDomain.length - 1);
     const tr = document.createElement('tr');
-    const label = d.fqdn.slice(0, d.fqdn.length - domain.length - 1);
-    tr.innerHTML = `<td class="host"><mark>${esc(label)}</mark>.${esc(domain)}</td>` +
-      `<td class="ip">${esc(d.ip)}</td><td class="num">${d.round}</td>`;
-    $('hitsB').appendChild(tr);
-    $('mHits').textContent = hits; $('cHits').textContent = hits;
-    log(`resolved  ${d.fqdn} → ${d.ip}`, 'ok');
+    tr.innerHTML = `<td class="host"><mark>${esc(label)}</mark>.${esc(curDomain)}</td>
+      <td class="ip">${esc(d.ip)}</td><td class="num">${d.round}</td>`;
+    $('b4').appendChild(tr);
+    $('kHits').textContent = hits.length;
+    log(`resolved  ${d.fqdn} → ${d.ip}`,'ok');
   }
   else if (ev === 'round_done') {
     tested += d.tested;
-    $('mRate').textContent = (100 * hits / Math.max(tested, 1)).toFixed(1) + '%';
+    $('kRate').textContent = (100*hits.length/Math.max(tested,1)).toFixed(1) + '%';
+    railState(3,'done', hits.length + ' resolved');
+    railState(4, d.new ? 'active' : 'done', `round ${d.round}: +${d.new}`);
     log(`round ${d.round} complete · ${d.new} new of ${d.tested} tested`);
   }
   else if (ev === 'done') {
-    log(`finished · ${d.total ?? 0} validated subdomains`, 'ok');
+    railState(4,'done', curRound + (curRound===1?' round':' rounds'));
+    if (hits.length) {
+      ['xTxt','xJson','xCsv'].forEach(i => $(i).disabled = false);
+      railState(5,'done', hits.length + ' to export');
+      saveRun();
+    }
+    log(`finished · ${hits.length} validated subdomains`,'ok');
   }
 }
 
-const esc = s => String(s).replace(/[&<>"']/g,
-  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+/* ── export ─────────────────────────────────────────── */
+const dl = (name, body, type) => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([body], {type})); a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('xTxt').onclick = () => {
+  const txt = hits.map(h => h.fqdn).join('\n');
+  navigator.clipboard.writeText(txt).then(
+    () => { $('xTxt').textContent = 'Copied ✓';
+            setTimeout(() => $('xTxt').textContent = 'Copy as list', 1600); },
+    () => dl(curDomain + '.txt', txt, 'text/plain'));
+};
+$('xJson').onclick = () => dl(curDomain + '-subfury.json',
+  JSON.stringify({domain:curDomain, generated:new Date().toISOString(),
+    model:{params:model?.params, architecture:model?.architecture},
+    candidates_tested:tested, results:hits}, null, 2), 'application/json');
+$('xCsv').onclick = () => dl(curDomain + '-subfury.csv',
+  'subdomain,ip,round\n' + hits.map(h => `${h.fqdn},${h.ip},${h.round}`).join('\n'),
+  'text/csv');
 
+/* ── history ────────────────────────────────────────── */
+const HK = 'subfury.runs';
+const loadRuns = () => { try { return JSON.parse(localStorage.getItem(HK)) || [] }
+                         catch { return [] } };
+function saveRun() {
+  const runs = loadRuns();
+  runs.unshift({domain:curDomain, at:Date.now(), hits:hits.length,
+                tested, results:hits.slice(0,300)});
+  localStorage.setItem(HK, JSON.stringify(runs.slice(0,25)));
+  renderHist();
+}
+function renderHist() {
+  const runs = loadRuns();
+  $('hist').innerHTML = runs.length ? runs.map((r,i) =>
+    `<button class="hrow" data-i="${i}"><span class="d">${esc(r.domain)}</span>
+     <span class="b">${r.hits} found</span><span>of ${r.tested} tested</span>
+     <span class="w">${new Date(r.at).toLocaleString('en-GB',{hour12:false})}</span></button>`
+  ).join('') : '<div class="empty" style="padding:var(--s5)"><p>Completed runs are saved here, in this browser only.</p></div>';
+  $('hist').querySelectorAll('.hrow').forEach(b => b.onclick = () => {
+    const r = loadRuns()[+b.dataset.i];
+    curDomain = r.domain; hits = r.results;
+    $('domain').value = r.domain;
+    $('b4').innerHTML = ''; $('e4').style.display='none'; $('t4').hidden = false;
+    r.results.forEach(h => {
+      const lab = h.fqdn.slice(0, h.fqdn.length - r.domain.length - 1);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="host"><mark>${esc(lab)}</mark>.${esc(r.domain)}</td>
+        <td class="ip">${esc(h.ip)}</td><td class="num">${h.round}</td>`;
+      $('b4').appendChild(tr);
+    });
+    $('kHits').textContent = r.hits; $('kRate').textContent =
+      (100*r.hits/Math.max(r.tested,1)).toFixed(1)+'%';
+    ['xTxt','xJson','xCsv'].forEach(i => $(i).disabled = !r.results.length);
+    $('s4').scrollIntoView({behavior:'smooth'});
+    log(`loaded run · ${r.domain} · ${r.hits} results`);
+  });
+}
+renderHist();
+
+$('run').onclick = run;
 $('stop').onclick = () => ctrl && ctrl.abort();
 addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') $('form').requestSubmit();
+  if ((e.metaKey||e.ctrlKey) && e.key === 'Enter') run();
 });
 </script>
 </body>
