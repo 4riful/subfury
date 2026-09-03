@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+
+# large / generated artifacts
+data/cc/
+data/groups_*.jsonl
+results/**/*.pt
+results/train.log
+
+# keep tokenizers and code
+!results/tokenizer.json
+!results/subfury_v2/tokenizer.json
+
+# webui runtime
+webui/__pycache__/
+
+# third-party wordlists (fetched, see README)
+data/subdomains_*.txt

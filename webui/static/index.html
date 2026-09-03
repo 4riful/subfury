@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SubFury — subdomain prediction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1120; --surface:#0f172a; --raised:#151f33; --line:#1f2b40; --line-2:#2b3a52;
+  --fg:#f8fafc; --fg-2:#a5b3c8; --fg-3:#6f7f96;
+  --accent:#22c55e; --accent-dim:#0d3b22; --info:#5ea9ff; --warn:#f5b545; --err:#f4626b;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased}
+::selection{background:var(--accent);color:#04150b}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+*::-webkit-scrollbar{width:10px;height:10px}
+*::-webkit-scrollbar-track{background:var(--surface)}
+*::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;
+  border:2px solid var(--surface)}
+*::-webkit-scrollbar-thumb:hover{background:#3a4c69}
+*{scrollbar-width:thin;scrollbar-color:var(--line-2) var(--surface)}
+
+/* ── masthead ───────────────────────────────────────────── */
+.mast{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
+  border-bottom:1px solid var(--line);background:var(--surface);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font:700 15px/1 var(--mono);
+  letter-spacing:-.02em}
+.brand svg{color:var(--accent)}
+.brand em{font-style:normal;color:var(--fg-3);font-weight:400}
+.readout{display:flex;gap:var(--s5);margin-left:auto;align-items:baseline}
+.readout div{display:flex;align-items:baseline;gap:7px}
+.readout b{font:500 15px/1 var(--mono);font-variant-numeric:tabular-nums;
+  color:var(--fg);min-width:2ch}
+.readout b.live{color:var(--accent)}
+.readout span{font-size:11px;color:var(--fg-3);text-transform:uppercase;
+  letter-spacing:.08em}
+.status{display:flex;align-items:center;gap:7px;font:400 12px/1 var(--mono);
+  color:var(--fg-2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--fg-3);flex:none}
+.dot.ok{background:var(--accent);box-shadow:0 0 0 3px rgba(34,197,94,.16)}
+.dot.bad{background:var(--err);box-shadow:0 0 0 3px rgba(244,98,107,.16)}
+.dot.busy{background:var(--info);animation:pulse 1.4s var(--ease) infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ── shell ──────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:312px minmax(0,1fr);gap:var(--s5);
+  padding:var(--s5);align-items:start;max-width:1600px;margin:0 auto}
+@media(max-width:900px){.shell{grid-template-columns:1fr;padding:var(--s4);gap:var(--s4)}}
+@media(max-width:640px){
+  .mast{padding:var(--s3) var(--s4);gap:var(--s3)}
+  .readout{margin-left:0;width:100%;gap:var(--s4);justify-content:space-between}
+  .readout span{letter-spacing:.04em}
+  .results{min-height:340px}
+}
+
+/* ── console (left) ─────────────────────────────────────── */
+.console{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:var(--s5) var(--s4) var(--s4);position:sticky;top:var(--s5)}
+@media(max-width:900px){.console{position:static}}
+.console h2{margin:0 0 var(--s4);font:600 12px/1 var(--sans);color:var(--fg-3);
+  text-transform:uppercase;letter-spacing:.1em}
+label{display:block;font-size:12px;color:var(--fg-2);margin:var(--s4) 0 6px;
+  font-weight:500}
+label:first-of-type{margin-top:0}
+.hint{font-size:11px;color:var(--fg-3);margin-top:5px;line-height:1.45}
+input,textarea{width:100%;background:var(--bg);color:var(--fg);
+  border:1px solid var(--line-2);border-radius:7px;padding:9px 11px;
+  font:400 13px/1.5 var(--mono);transition:border-color .15s var(--ease),
+  box-shadow .15s var(--ease)}
+input::placeholder,textarea::placeholder{color:var(--fg-3)}
+input:hover,textarea:hover{border-color:#38496a}
+input:focus,textarea:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(34,197,94,.14)}
+input[aria-invalid="true"]{border-color:var(--err)}
+textarea{min-height:96px;resize:vertical}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3)}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:var(--s4);
+  padding:10px 11px;background:var(--bg);border:1px solid var(--line);
+  border-radius:7px;cursor:pointer;transition:border-color .15s var(--ease)}
+.toggle:hover{border-color:var(--line-2)}
+.toggle input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex:none}
+.toggle span{font-size:12.5px;color:var(--fg-2)}
+.actions{display:flex;gap:var(--s2);margin-top:var(--s5)}
+button{font:600 13px/1 var(--sans);border-radius:7px;cursor:pointer;
+  border:1px solid transparent;padding:11px 14px;display:inline-flex;
+  align-items:center;justify-content:center;gap:7px;
+  transition:background .15s var(--ease),border-color .15s var(--ease),
+  color .15s var(--ease),transform .1s var(--ease)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.42;cursor:not-allowed}
+.btn-go{flex:1;background:var(--accent);color:#04150b}
+.btn-go:hover:not(:disabled){background:#38d873}
+.btn-stop{background:transparent;border-color:var(--line-2);color:var(--fg-2)}
+.btn-stop:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+.notice{margin-top:var(--s4);padding:10px 12px;border-radius:7px;
+  background:rgba(245,181,69,.07);border:1px solid rgba(245,181,69,.22);
+  font-size:11.5px;line-height:1.5;color:#e5c07b;display:flex;gap:9px}
+.notice svg{flex:none;margin-top:1px;color:var(--warn)}
+
+/* ── results (right) ────────────────────────────────────── */
+.results{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;min-height:520px;display:flex;flex-direction:column}
+.tabs{display:flex;gap:var(--s1);padding:var(--s3) var(--s4) 0;
+  border-bottom:1px solid var(--line)}
+.tabs button{background:none;border:none;border-bottom:2px solid transparent;
+  border-radius:0;padding:9px 13px;color:var(--fg-3);font-weight:500;font-size:13px}
+.tabs button:hover{color:var(--fg-2)}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.tabs .count{font:500 11px/1 var(--mono);background:var(--raised);color:var(--fg-2);
+  padding:3px 6px;border-radius:20px;font-variant-numeric:tabular-nums}
+.pane{display:none;flex:1;overflow:auto;max-height:64vh}
+.pane[data-on]{display:block}
+table{width:100%;border-collapse:collapse}
+th{position:sticky;top:0;z-index:1;background:var(--surface);text-align:left;
+  font:500 11px/1 var(--sans);color:var(--fg-3);text-transform:uppercase;
+  letter-spacing:.07em;padding:11px var(--s4);border-bottom:1px solid var(--line);
+  white-space:nowrap}
+td{padding:9px var(--s4);border-bottom:1px solid rgba(31,43,64,.6);
+  font:400 13px/1.45 var(--mono);font-variant-numeric:tabular-nums}
+tbody tr{animation:row .34s var(--ease) both}
+@keyframes row{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+tbody tr:hover td{background:var(--raised)}
+td.host{color:var(--fg);font-weight:500}
+td.host mark{background:none;color:var(--accent);font-weight:700}
+td.ip{color:var(--info)}
+td.num{color:var(--fg-3);width:1%;white-space:nowrap}
+td.rank{color:var(--fg-3);width:1%;text-align:right;padding-right:0}
+.meter{display:block;height:3px;border-radius:2px;background:var(--line);
+  overflow:hidden;width:140px;max-width:100%}
+.meter i{display:block;height:100%;background:var(--info);border-radius:2px;
+  transition:width .3s var(--ease)}
+td:has(.meter){width:1%}
+.pill{font:500 11px/1 var(--mono);padding:3px 7px;border-radius:5px;
+  background:var(--accent-dim);color:var(--accent);white-space:nowrap}
+.empty{padding:var(--s6) var(--s5);text-align:center;color:var(--fg-3)}
+.empty svg{color:var(--line-2);margin-bottom:var(--s3)}
+.empty p{margin:0;font-size:13px;max-width:46ch;margin-inline:auto;line-height:1.6}
+.empty p b{color:var(--fg-2);font-weight:500}
+#log{margin:0;padding:var(--s4);font:400 12.5px/1.75 var(--mono);color:var(--fg-2);
+  white-space:pre-wrap;word-break:break-word}
+#log .t{color:var(--fg-3)}
+#log .ok{color:var(--accent)}
+#log .er{color:var(--err)}
+#log .hd{color:var(--fg);font-weight:700}
+@media (prefers-reduced-motion:reduce){
+  *,tbody tr{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="brand">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/>
+      <circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>
+    </svg>
+    SubFury <em>v2</em>
+  </div>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">checking model</span></div>
+  <div class="readout">
+    <div><b id="mRound">0</b><span>round</span></div>
+    <div><b id="mCand">0</b><span>candidates</span></div>
+    <div><b id="mHits" class="live">0</b><span>resolved</span></div>
+    <div><b id="mRate">—</b><span>hit rate</span></div>
+  </div>
+</header>
+
+<main class="shell">
+  <!-- ── control console ── -->
+  <form class="console" id="form" autocomplete="off">
+    <h2>Target</h2>
+
+    <label for="domain">Apex domain</label>
+    <input id="domain" name="domain" placeholder="example.com" spellcheck="false"
+           aria-describedby="domainHint">
+    <p class="hint" id="domainHint">The zone you are authorized to enumerate.</p>
+
+    <label for="known">Known subdomains</label>
+    <textarea id="known" name="known" spellcheck="false"
+      placeholder="www&#10;api&#10;dev"></textarea>
+    <p class="hint">One label per line. The model predicts from these — more
+      context yields sharper predictions.</p>
+
+    <div class="pair">
+      <div>
+        <label for="topn">Candidates</label>
+        <input id="topn" type="number" value="100" min="10" max="1000" step="10">
+      </div>
+      <div>
+        <label for="beams">Beam width</label>
+        <input id="beams" type="number" value="64" min="8" max="256" step="8">
+      </div>
+    </div>
+
+    <label for="rec">Recursion rounds</label>
+    <input id="rec" type="number" value="3" min="1" max="10">
+    <p class="hint">Resolved hits are fed back as context for the next round.</p>
+
+    <label class="toggle" for="resolve">
+      <input type="checkbox" id="resolve" checked>
+      <span>Validate candidates over DNS</span>
+    </label>
+
+    <div class="actions">
+      <button type="submit" class="btn-go" id="run">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86A1 1 0 0 0 8 5.14z"/>
+        </svg>
+        <span id="runLabel">Run prediction</span>
+      </button>
+      <button type="button" class="btn-stop" id="stop" disabled>Stop</button>
+    </div>
+
+    <p class="notice">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <path d="M12 9v4.5M12 17h.01"/><path d="M10.3 3.9 2.4 17.4A2 2 0 0 0 4.1 20.4h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>
+      </svg>
+      DNS validation sends live queries. Only run it against domains you are
+      authorized to test.
+    </p>
+  </form>
+
+  <!-- ── results ── -->
+  <section class="results">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="pHits" id="tHits">
+        Resolved <span class="count" id="cHits">0</span></button>
+      <button role="tab" aria-selected="false" aria-controls="pCand" id="tCand">
+        Candidates <span class="count" id="cCand">0</span></button>
+      <button role="tab" aria-selected="false" aria-controls="pLog" id="tLog">
+        Activity</button>
+    </div>
+
+    <div class="pane" data-on id="pHits" role="tabpanel" aria-labelledby="tHits">
+      <div class="empty" id="eHits">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 12h20"/><circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        <p>Nothing resolved yet. Enter an apex domain and the subdomains you
+           already know, then <b>run a prediction</b>.</p>
+      </div>
+      <table hidden id="hitsT">
+        <thead><tr><th>Subdomain</th><th>A record</th><th>Round</th></tr></thead>
+        <tbody id="hitsB"></tbody>
+      </table>
+    </div>
+
+    <div class="pane" id="pCand" role="tabpanel" aria-labelledby="tCand">
+      <div class="empty" id="eCand">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h9"/>
+        </svg>
+        <p>Beam-search candidates appear here, ranked by log-probability.</p>
+      </div>
+      <table hidden id="candT">
+        <thead><tr><th class="rank">#</th><th>Label</th><th>Log-prob</th>
+          <th>Confidence</th></tr></thead>
+        <tbody id="candB"></tbody>
+      </table>
+    </div>
+
+    <div class="pane" id="pLog" role="tabpanel" aria-labelledby="tLog">
+      <pre id="log"><span class="t">idle — awaiting run.</span></pre>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = i => document.getElementById(i);
+let ctrl = null, hits = 0, cands = 0, tested = 0;
+
+/* tabs */
+const tabs = [['tHits','pHits'],['tCand','pCand'],['tLog','pLog']];
+tabs.forEach(([t,p]) => $(t).onclick = () => {
+  tabs.forEach(([t2,p2]) => {
+    $(t2).setAttribute('aria-selected', String(t2 === t));
+    $(p2).toggleAttribute('data-on', p2 === p);
+  });
+});
+
+/* model status */
+fetch('/api/status').then(r => r.json()).then(s => {
+  if (!s.model_available) {
+    $('dot').className = 'dot bad';
+    $('statusText').textContent = 'no checkpoint — run train.py';
+    $('run').disabled = true;
+  } else {
+    $('dot').className = 'dot ok';
+    $('statusText').textContent = s.model_loaded
+      ? `${s.params_m}M params · ${s.device}` : 'model ready';
+  }
+}).catch(() => {
+  $('dot').className = 'dot bad';
+  $('statusText').textContent = 'backend offline';
+});
+
+function stamp() {
+  return new Date().toLocaleTimeString('en-GB', {hour12: false});
+}
+function log(msg, cls) {
+  const el = $('log');
+  if (el.dataset.clean !== '1') { el.textContent = ''; el.dataset.clean = '1'; }
+  const line = document.createElement('span');
+  line.innerHTML = `<span class="t">${stamp()}</span>  `;
+  const body = document.createElement('span');
+  if (cls) body.className = cls;
+  body.textContent = msg;
+  line.appendChild(body);
+  el.appendChild(line);
+  el.appendChild(document.createTextNode('\n'));
+  el.scrollTop = el.scrollHeight;
+}
+
+function reset() {
+  hits = 0; cands = 0; tested = 0;
+  $('hitsB').innerHTML = ''; $('candB').innerHTML = '';
+  $('hitsT').hidden = true; $('candT').hidden = true;
+  $('eHits').style.display = ''; $('eCand').style.display = '';
+  $('mRound').textContent = '0'; $('mCand').textContent = '0';
+  $('mHits').textContent = '0'; $('mRate').textContent = '—';
+  $('cHits').textContent = '0'; $('cCand').textContent = '0';
+  $('log').dataset.clean = '0';
+}
+
+function busy(on) {
+  $('run').disabled = on; $('stop').disabled = !on;
+  $('runLabel').textContent = on ? 'Running…' : 'Run prediction';
+  $('dot').className = on ? 'dot busy' : 'dot ok';
+  if (on) $('statusText').textContent = 'predicting';
+}
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const domain = $('domain').value.trim().toLowerCase().replace(/^https?:\/\//, '');
+  const known = $('known').value.split('\n').map(s => s.trim()).filter(Boolean);
+  $('domain').setAttribute('aria-invalid', String(!domain));
+  if (!domain) { $('domain').focus(); log('Enter an apex domain to continue.', 'er'); tabTo('tLog'); return; }
+  if (!known.length) { $('known').focus(); log('Enter at least one known subdomain — the model predicts from context.', 'er'); tabTo('tLog'); return; }
+
+  reset(); busy(true);
+  log('run started · ' + domain, 'hd');
+  ctrl = new AbortController();
+
+  try {
+    const res = await fetch('/api/predict', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      signal: ctrl.signal,
+      body: JSON.stringify({domain, known,
+        topn: +$('topn').value, num_beams: +$('beams').value,
+        resolve: $('resolve').checked, max_recursion: +$('rec').value}),
+    });
+    if (!res.ok) throw new Error('server returned ' + res.status);
+    const rd = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const {done, value} = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, {stream: true});
+      const parts = buf.split('\n\n'); buf = parts.pop();
+      for (const c of parts) {
+        const ev = (c.match(/^event: (.*)$/m) || [])[1];
+        const dt = (c.match(/^data: (.*)$/m) || [])[1];
+        if (ev && dt) handle(ev, JSON.parse(dt), domain);
+      }
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') log('stopped by operator.', 'er');
+    else { log('request failed — ' + err.message, 'er'); tabTo('tLog'); }
+  } finally {
+    busy(false);
+    $('statusText').textContent = 'idle';
+  }
+});
+
+function tabTo(id) { $(id).click(); }
+
+function handle(ev, d, domain) {
+  if (ev === 'log') log(d.msg);
+  else if (ev === 'error') { log(d.msg, 'er'); tabTo('tLog'); }
+  else if (ev === 'round') {
+    $('mRound').textContent = d.round;
+    log(`round ${d.round} · conditioning on ${d.known} known labels`, 'hd');
+  }
+  else if (ev === 'candidates') {
+    $('eCand').style.display = 'none'; $('candT').hidden = false;
+    // scale the gauge across this batch's actual range so ranks read apart
+    const scores = d.items.map(i => i.score);
+    const hi = Math.max(...scores), lo = Math.min(...scores);
+    const span = hi - lo || 1;
+    const frag = document.createDocumentFragment();
+    d.items.forEach(it => {
+      cands++;
+      const pct = 14 + 86 * ((it.score - lo) / span);
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        `<td class="rank">${cands}</td><td class="host">${esc(it.label)}</td>` +
+        `<td class="num">${it.score.toFixed(3)}</td>` +
+        `<td><span class="meter"><i style="width:${pct}%"></i></span></td>`;
+      frag.appendChild(tr);
+    });
+    $('candB').appendChild(frag);
+    $('mCand').textContent = cands; $('cCand').textContent = cands;
+    log(`${d.items.length} candidates generated`);
+  }
+  else if (ev === 'hit') {
+    hits++;
+    $('eHits').style.display = 'none'; $('hitsT').hidden = false;
+    const tr = document.createElement('tr');
+    const label = d.fqdn.slice(0, d.fqdn.length - domain.length - 1);
+    tr.innerHTML = `<td class="host"><mark>${esc(label)}</mark>.${esc(domain)}</td>` +
+      `<td class="ip">${esc(d.ip)}</td><td class="num">${d.round}</td>`;
+    $('hitsB').appendChild(tr);
+    $('mHits').textContent = hits; $('cHits').textContent = hits;
+    log(`resolved  ${d.fqdn} → ${d.ip}`, 'ok');
+  }
+  else if (ev === 'round_done') {
+    tested += d.tested;
+    $('mRate').textContent = (100 * hits / Math.max(tested, 1)).toFixed(1) + '%';
+    log(`round ${d.round} complete · ${d.new} new of ${d.tested} tested`);
+  }
+  else if (ev === 'done') {
+    log(`finished · ${d.total ?? 0} validated subdomains`, 'ok');
+  }
+}
+
+const esc = s => String(s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+$('stop').onclick = () => ctrl && ctrl.abort();
+addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') $('form').requestSubmit();
+});
+</script>
+</body>
+</html>
