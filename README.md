@@ -1,15 +1,15 @@
 <div align="center">
   <img src="https://github.com/user-attachments/assets/e1328a64-077f-47df-bf2d-da588bbe9a79" alt="subfury" width="180" height="180"/>
 
-  <h1>SubFury v2</h1>
+  <h1>SubFury</h1>
 
   <p><b>A purpose-built transformer that predicts an organization's subdomains
   from the ones you already know.</b></p>
 
   <p>
     <img alt="model" src="https://img.shields.io/badge/model-7.8M_params-22c55e">
-    <img alt="recall at N=10" src="https://img.shields.io/badge/recall%4010-0.114_vs_0.052_freq._prior-5ea9ff">
-    <img alt="recall at N=200" src="https://img.shields.io/badge/recall%40200-v2_0.217_·_v3_0.260-f59e0b">
+    <img alt="beam search, recall at N=10" src="https://img.shields.io/badge/beam_%40N%3D10-0.114_vs_0.052_prior-5ea9ff">
+    <img alt="retrieval head, recall at N=200" src="https://img.shields.io/badge/retrieval_%40N%3D200-0.260_vs_0.236_prior-f59e0b">
     <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
   </p>
 </div>
@@ -53,14 +53,14 @@ are being run. Every method gets the same candidate budget N. No DNS, no network
 percentile-bootstrap 95% CIs over apexes, 2,000 resamples.
 
 ```
-method                              recall@10             recall@25             recall@50            recall@100            recall@200      MAP  apex hit@max
---------------------------------------------------------------------------------------------------------------------------------------------------------
-wordlist:subdomains_tiny.txt  0.018 [0.013,0.024]   0.027 [0.021,0.034]   0.058 [0.048,0.069]   0.097 [0.084,0.112]   0.138 [0.124,0.154]   0.0083      284/545
-frequency-prior               0.052 [0.042,0.062]   0.100 [0.084,0.118]   0.134 [0.116,0.153]   0.179 [0.158,0.202]   0.236 [0.212,0.262]   0.0361      306/545
-markov-3gram                  0.029 [0.023,0.035]   0.047 [0.038,0.057]   0.073 [0.060,0.087]   0.117 [0.100,0.137]   0.145 [0.125,0.169]   0.0202      200/545
-markov-4gram                  0.059 [0.048,0.070]   0.090 [0.075,0.107]   0.122 [0.104,0.143]   0.154 [0.134,0.176]   0.194 [0.171,0.220]   0.0356      256/545
-markov-5gram                  0.057 [0.046,0.068]   0.098 [0.082,0.116]   0.132 [0.113,0.152]   0.175 [0.154,0.199]   0.224 [0.200,0.250]   0.0369      296/545
-subfury-v2 (neural)           0.114 [0.095,0.134]   0.172 [0.148,0.196]   0.207 [0.182,0.235]   0.216 [0.190,0.244]   0.217 [0.192,0.244]   0.0968      264/545
+method                                     recall@10             recall@25             recall@50            recall@100            recall@200       MAP  apex hit@max
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+wordlist:subdomains_tiny.txt       0.018 [0.013,0.024]     0.027 [0.021,0.034]     0.058 [0.048,0.069]     0.097 [0.084,0.112]     0.138 [0.124,0.154]    0.0083       284/545
+frequency-prior                    0.052 [0.042,0.062]     0.100 [0.084,0.118]     0.134 [0.116,0.153]     0.179 [0.158,0.202]     0.236 [0.212,0.262]    0.0361       306/545
+markov-3gram                       0.029 [0.023,0.035]     0.047 [0.038,0.057]     0.073 [0.060,0.087]     0.117 [0.100,0.137]     0.145 [0.125,0.169]    0.0202       200/545
+markov-4gram                       0.059 [0.048,0.070]     0.090 [0.075,0.107]     0.122 [0.104,0.143]     0.154 [0.134,0.176]     0.194 [0.171,0.220]    0.0356       256/545
+markov-5gram                       0.057 [0.046,0.068]     0.098 [0.082,0.116]     0.132 [0.113,0.152]     0.175 [0.154,0.199]     0.224 [0.200,0.250]    0.0369       296/545
+subfury-beam                       0.114 [0.095,0.134]     0.172 [0.148,0.196]     0.207 [0.182,0.235]     0.216 [0.190,0.244]     0.217 [0.192,0.244]    0.0968       264/545
 ```
 
 `frequency-prior` is the baseline that matters: the training-split label
@@ -75,10 +75,13 @@ Paired bootstrap of each method minus the frequency prior on the same apexes,
 2,000 resamples (`paired_vs_frequency_prior` in the same artifact):
 
 ```
-method                             delta@10                  delta@25                  delta@50                 delta@100                 delta@200
-wordlist:subdomains_tiny.txt  -0.034 [-0.044,-0.023]*   -0.073 [-0.090,-0.057]*   -0.076 [-0.095,-0.059]*   -0.081 [-0.101,-0.064]*   -0.098 [-0.119,-0.079]*
-markov-5gram                  +0.005 [+0.001,+0.009]*   -0.002 [-0.006,+0.001]    -0.002 [-0.007,+0.002]    -0.003 [-0.010,+0.003]    -0.012 [-0.019,-0.005]*
-subfury-v2 (neural)           +0.062 [+0.048,+0.077]*   +0.071 [+0.055,+0.089]*   +0.073 [+0.056,+0.090]*   +0.037 [+0.023,+0.053]*   -0.019 [-0.030,-0.007]*
+paired bootstrap: method minus frequency-prior (same apexes, 2000 resamples)
+method                                          Δ@10                      Δ@25                      Δ@50                     Δ@100                     Δ@200
+wordlist:subdomains_tiny.txt   -0.034 [-0.044,-0.023]*   -0.073 [-0.090,-0.057]*   -0.076 [-0.095,-0.059]*   -0.081 [-0.101,-0.064]*   -0.098 [-0.119,-0.079]*
+markov-3gram                 -0.023 [-0.031,-0.016]*   -0.053 [-0.066,-0.041]*   -0.061 [-0.073,-0.049]*   -0.062 [-0.076,-0.049]*   -0.091 [-0.105,-0.077]*
+markov-4gram                 +0.007 [+0.002,+0.011]*   -0.010 [-0.016,-0.005]*   -0.012 [-0.019,-0.005]*   -0.025 [-0.035,-0.015]*   -0.042 [-0.054,-0.030]*
+markov-5gram                 +0.005 [+0.001,+0.009]*   -0.002 [-0.006,+0.001]    -0.002 [-0.007,+0.002]    -0.003 [-0.010,+0.003]    -0.012 [-0.019,-0.005]*
+subfury-beam                 +0.062 [+0.048,+0.077]*   +0.071 [+0.055,+0.089]*   +0.073 [+0.056,+0.090]*   +0.037 [+0.023,+0.053]*   -0.019 [-0.030,-0.007]*
 * = 95% CI of the paired difference excludes zero
 ```
 
@@ -92,17 +95,17 @@ subfury-v2 (neural)           +0.062 [+0.048,+0.077]*   +0.071 [+0.055,+0.089]* 
   0.217) because beam search runs out of distinct plausible labels, while the
   prior keeps scoring hits by enumerating more of the global head.
 
-So the honest claim is a regime, not a single number: **v2 is worth running when
-the DNS budget is the binding constraint, and is not worth running when you can
+So the honest claim is a regime, not a single number: **the beam-search model is worth running
+when the DNS budget is the binding constraint, and is not worth running when you can
 afford to fire a few hundred globally common labels at the target.**
 
-That ceiling is a property of beam search, not of the idea — which is what v3
-below is for.
+That ceiling is a property of beam search, not of the idea — which is what the
+retrieval head below is for.
 
-### v3: a retrieval head removes the ceiling
+### The retrieval head removes the ceiling
 
-`results/research/v3_ablation.json`. Same harness, same 545 apexes, same
-budgets. v3 keeps the set-conditioned encoder but adds a **retrieval head** that
+`results/research/ablation.json`. Same harness, same 545 apexes, same
+budgets. SubFury keeps the set-conditioned encoder but adds a **retrieval head** that
 scores the entire label vocabulary directly, instead of asking beam search to
 enumerate it. Four runs, ablating the set encoder, the retrieval head, and the
 prior subtraction.
@@ -110,26 +113,30 @@ prior subtraction.
 ```
 method                                   recall@10             recall@25             recall@50            recall@100            recall@200       MAP  apex hit@max
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------
+settrans-full/hybrid             0.081 [0.068,0.096]     0.131 [0.112,0.152]     0.172 [0.151,0.195]     0.216 [0.194,0.241]     0.253 [0.229,0.280]    0.0556       317/545
 settrans-full/generator          0.046 [0.033,0.059]     0.073 [0.058,0.090]     0.100 [0.082,0.119]     0.100 [0.083,0.120]     0.100 [0.083,0.120]    0.0340       137/545
 settrans-full/retriever          0.086 [0.072,0.101]     0.136 [0.117,0.156]     0.177 [0.156,0.201]     0.219 [0.196,0.244]     0.252 [0.228,0.278]    0.0638       320/545
 deepsets-full/hybrid             0.096 [0.080,0.112]     0.141 [0.121,0.162]     0.184 [0.162,0.208]     0.227 [0.202,0.254]     0.258 [0.233,0.286]    0.0656       317/545
+deepsets-full/generator          0.060 [0.047,0.075]     0.093 [0.076,0.111]     0.119 [0.101,0.140]     0.122 [0.104,0.143]     0.123 [0.104,0.143]    0.0428       170/545
 deepsets-full/retriever          0.100 [0.084,0.116]     0.145 [0.125,0.166]     0.184 [0.164,0.208]     0.232 [0.207,0.259]     0.260 [0.235,0.286]    0.0759       322/545
 settrans-gen/generator           0.026 [0.019,0.034]     0.075 [0.061,0.091]     0.103 [0.086,0.122]     0.107 [0.089,0.127]     0.107 [0.089,0.126]    0.0171       162/545
+settrans-noprior/hybrid          0.076 [0.062,0.092]     0.113 [0.094,0.134]     0.138 [0.118,0.161]     0.161 [0.140,0.185]     0.184 [0.159,0.210]    0.0537       216/545
+settrans-noprior/generator       0.048 [0.035,0.061]     0.091 [0.074,0.108]     0.119 [0.100,0.140]     0.122 [0.103,0.142]     0.122 [0.103,0.143]    0.0382       164/545
 settrans-noprior/retriever       0.082 [0.066,0.098]     0.117 [0.096,0.138]     0.134 [0.114,0.156]     0.155 [0.133,0.179]     0.180 [0.157,0.207]    0.0631       211/545
 ```
 
-Paired against v2 — same apexes, so between-apex variance cancels
-(`results/research/v3_vs_v2_paired.json`):
+Paired against the beam-search model — same apexes, so between-apex variance cancels
+(`results/research/paired_vs_beam.json`):
 
 ```
-v3 variant vs subfury-v2                                 @10                       @25                       @50                      @100                      @200
+variant vs beam-search model                                       @10                       @25                       @50                      @100                      @200
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
-deepsets-full/retriever              -0.015 [-0.024,-0.006]*   -0.026 [-0.037,-0.016]*   -0.023 [-0.033,-0.013]*   +0.016 [+0.005,+0.028]*   +0.043 [+0.031,+0.055]*
-deepsets-full/hybrid                 -0.019 [-0.028,-0.010]*   -0.031 [-0.041,-0.021]*   -0.023 [-0.033,-0.014]*   +0.011 [-0.000,+0.021]    +0.041 [+0.030,+0.053]*
-settrans-full/retriever              -0.028 [-0.039,-0.018]*   -0.036 [-0.048,-0.023]*   -0.030 [-0.043,-0.017]*   +0.003 [-0.010,+0.016]    +0.035 [+0.022,+0.048]*
-settrans-noprior/retriever           -0.032 [-0.042,-0.024]*   -0.055 [-0.068,-0.043]*   -0.073 [-0.087,-0.060]*   -0.061 [-0.075,-0.048]*   -0.037 [-0.050,-0.024]*
+deepsets-full/retriever                        -0.015 [-0.024,-0.006]*   -0.026 [-0.037,-0.016]*   -0.023 [-0.033,-0.013]*   +0.016 [+0.005,+0.028]*   +0.043 [+0.031,+0.055]*
+deepsets-full/hybrid                           -0.019 [-0.028,-0.010]*   -0.031 [-0.041,-0.021]*   -0.023 [-0.033,-0.014]*   +0.011 [-0.000,+0.021]    +0.041 [+0.030,+0.053]*
+settrans-full/retriever                        -0.028 [-0.039,-0.018]*   -0.036 [-0.048,-0.023]*   -0.030 [-0.043,-0.017]*   +0.003 [-0.010,+0.016]    +0.035 [+0.022,+0.048]*
+settrans-noprior/retriever                     -0.032 [-0.042,-0.024]*   -0.055 [-0.068,-0.043]*   -0.073 [-0.087,-0.060]*   -0.061 [-0.075,-0.048]*   -0.037 [-0.050,-0.024]*
 
-* = paired 95% CI excludes zero.  Positive favours v3.
+* = paired 95% CI excludes zero.  Positive favours the retrieval architecture.
 ```
 
 Read it in four parts.
@@ -138,11 +145,11 @@ Read it in four parts.
   vocabulary beats beam search at every budget and takes **7.4s against 89.1s**
   for the same 545 apexes (`seconds`, same artifact — every retriever run lands
   at 7–10s, every run that decodes lands at 78–89s). The generator head alone saturates near 0.12 — flat from
-  N=50 to N=200 — for exactly the reason v2 does: beams run out of distinct
+  N=50 to N=200 — for the same reason beam search does: it runs out of distinct
   plausible labels. Ranking a fixed vocabulary has no such ceiling.
 - **Subtracting the prior helps recall and hurts the loss.** `settrans-noprior`
   had the *best* validation ranking loss of the four (3.010 against 3.877) and
-  is the *worst* ranker at every budget, losing to v2 everywhere. Predicting
+  is the *worst* ranker at every budget, losing to beam search everywhere. Predicting
   popularity minimises the loss without conditioning on anything. Had the
   ablation not been run, the better loss would have looked like the better model.
 - **The retrieval head also improves the generator that shares its encoder.**
@@ -151,15 +158,16 @@ Read it in four parts.
 - **Deep Sets beats the Set Transformer** at every budget. The extra attention
   machinery buys nothing on sets this size.
 
-What v3 does **not** do is win the tight-budget regime: it is significantly
-worse than v2 at N=10, 25 and 50. What it removes is the saturation — v2 is flat
+What the retrieval head does **not** do is win the tight-budget regime: it is
+significantly worse at N=10, 25 and 50. What it removes is the saturation — the
+beam-search model is flat
 at 0.216 → 0.217 from N=100 to N=200 while `deepsets-full` climbs to 0.260, and
 apexes with at least one correct label rise from **264/545 to 322/545**.
 
 > [!NOTE]
 > These runs train on the same Common Crawl corpus, so they inherit the corpus
-> mismatch documented below. v3 is an architecture result, not a corpus fix.
-> The shipped web UI still serves v2.
+> mismatch documented below. This is an architecture result, not a corpus fix.
+> The shipped web UI still serves the beam-search model.
 
 ### The closed-vocabulary ceiling
 
@@ -176,8 +184,8 @@ at N=200. The ordering, and the crossover, are unchanged.
 python3 research/run_baselines.py --neural    # → results/research/baselines.json
 ```
 
-`subfury_v2/evaluate.py` produced the older wordlist-only numbers still sitting
-in `results/subfury_v2/eval.json`. Its K/H split comes from a single sequential
+`subfury/evaluate.py` produced the older wordlist-only numbers still sitting
+in `results/subfury/eval.json`. Its K/H split comes from a single sequential
 `random.Random(seed)` that shuffles the apex list and then each apex's labels in
 iteration order, so the split changes with `--max-apexes`, with the min-label
 filter, and with file order — historical numbers from it are **not comparable
@@ -210,13 +218,13 @@ pip install -r requirements.txt
 pip install torch --index-url https://download.pytorch.org/whl/cu126   # or cpu
 
 # predict + validate against an authorized target
-python subfury_v2/predict.py example.com --known known.txt -n 200
+python subfury/predict.py example.com --known known.txt -n 200
 
 # model output only, no DNS traffic
-python subfury_v2/predict.py example.com --known known.txt -n 200 --no-resolve
+python subfury/predict.py example.com --known known.txt -n 200 --no-resolve
 
 # inspect the mechanism: tokens, conditioned prefix, beam scores
-python subfury_v2/explain.py --known api,dev,staging
+python subfury/explain.py --known api,dev,staging
 ```
 
 `--known` accepts bare labels (`api`) or FQDNs (`api.example.com`), one per line.
@@ -248,7 +256,7 @@ known labels  ──►  BPE  ──►  api [SEP] dev [SEP] staging [DELIM]
 
 **1. Tokenize.** A BPE trained *only* on subdomain data keeps real units whole —
 `api`, `staging`, `mail`, `prod`, `vpn` are each a single token. A generic English
-BPE fragments them, which is what made v1's DistilGPT-2 the wrong tool.
+BPE fragments them, which is what made a general-purpose LM the wrong tool here.
 
 **2. Condition.** Known labels are joined with `[SEP]` and terminated by `[DELIM]`,
 which means *"the known set ends here — now name a new member."* During training
@@ -303,13 +311,13 @@ curl -Lo data/subdomains_tiny.txt \
 
 # 1. apex-grouped hostnames from the Common Crawl host-level webgraph
 #    (drop vertex part files into data/cc/ first)
-python subfury_v2/data_prep.py
+python subfury/data_prep.py
 
 # 2. domain-specific BPE
-python subfury_v2/tokenizer_train.py
+python subfury/tokenizer_train.py
 
 # 3. train  (~3 min for 4 epochs on an RTX 4060)
-python subfury_v2/train.py --epochs 4
+python subfury/train.py --epochs 4
 
 # 4. score it against every baseline on one shared, order-independent split
 python3 research/run_baselines.py --neural
@@ -369,37 +377,15 @@ value.
 
 ---
 
-## What the first attempt got wrong
-
-The original notebook fine-tuned DistilGPT-2 on a flat wordlist and sampled
-blindly. It is preserved under `legacy/v1_distilgpt2/` as reference only —
-none of it is reachable from the current pipeline, and the reasons it was
-abandoned are worth more than the code is:
-
-| the first attempt | now |
-|---|---|
-| Blind generation from a global wordlist | Set-conditioned on the target's known subdomains |
-| DistilGPT-2, 82M, English BPE | Purpose-built 7.8M decoder + subdomain BPE |
-| Temperature sampling | Deterministic beam search |
-| "RL" = retrain on resolved hits | Recursive inference over a growing known set |
-| No evaluation | recall@N against five baselines on one shared split, with bootstrap CIs |
-| Hardcoded W&B API key | Credentials read from the environment |
-
-The last two rows are the ones that mattered. Without a shared-split benchmark
-there was no way to know the model was being flattered by its baseline — which
-is exactly what happened next, and what the numbers above now correct.
-
----
 
 ## Layout
 
 ```
-subfury_v2/     data_prep · tokenizer_train · model · train · predict · evaluate · explain
-research/       harness · baselines · diagnostics · v3 (scored, see v3_ablation.json)
-legacy/         v1 DistilGPT-2 scripts, kept for reference
-webui/          FastAPI backend + streaming single-page UI
-data/           wordlists, Common Crawl parts, generated apex groups
-results/        tokenizer, checkpoints, and the research artifacts every number here cites
+subfury/     data_prep · tokenizer_train · model · train · predict · evaluate · explain
+research/    harness · baselines · diagnostics · model (set encoder + retrieval head)
+webui/       FastAPI backend + streaming single-page UI
+data/        wordlists, Common Crawl parts, generated apex groups
+results/     tokenizer, checkpoints, and the research artifacts every number here cites
 ```
 
 ## License

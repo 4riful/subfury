@@ -246,7 +246,7 @@ hostnames that first appeared after T.**
   classification task on registered domains, not organization-conditioned hostname discovery.
 
 **Consequence for us:** a temporal split is a genuinely open evaluation contribution and is cheap
-differentiation. Note that `subfury_v2/evaluate.py` currently does a **random half-split per apex on
+differentiation. Note that `subfury/evaluate.py` currently does a **random half-split per apex on
 held-out apexes** — a set-completion split, not a temporal one. That is fine and matches Deep Sets' set
 expansion protocol, but it is not the same claim, and it should not be described as predicting *future*
 hostnames.

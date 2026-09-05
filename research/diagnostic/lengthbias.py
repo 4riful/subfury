@@ -12,7 +12,7 @@ chosen by measurement rather than taste.
 import argparse, json, os, random, statistics, sys
 import torch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury_v2"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury"))
 from predict import LABEL_RE, load_model                            # noqa: E402
 
 
@@ -42,7 +42,7 @@ def generate(model, tok, device, known, topn, num_beams, alpha, max_new_tokens=1
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test-jsonl", default="data/groups_test.jsonl")
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     ap.add_argument("--alphas", default="0,0.6,0.8,1.0")
     ap.add_argument("--minlens", default="1,2,3")
     ap.add_argument("--budgets", default="10,25,50,100")

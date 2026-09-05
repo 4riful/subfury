@@ -1,7 +1,7 @@
 """The set encoders must be permutation invariant and size-unbounded.
 
-v2 achieves invariance by sorting and then truncating to 24 labels, which throws
-information away. These assertions are what separates v3's claim from that.
+The beam-search model achieves invariance by sorting and then truncating to 24 labels, which throws
+information away. These assertions are what separates this claim from that.
 """
 import sys, os, torch
 sys.path.insert(0, os.path.dirname(__file__))
@@ -21,7 +21,7 @@ for enc in ("deepsets", "settrans"):
     delta = (a - b).abs().max().item()
     print(f"{enc:9s} permutation delta {delta:.2e}  {'PASS' if delta < 1e-4 else 'FAIL'}")
 
-# and it must accept sets far larger than v2's 24-label ceiling
+# and it must accept sets far larger than the beam-search model's 24-label ceiling
 m = SubFuryV3(V3Config(encoder="settrans")).eval()
 for n in (24, 128, 512):
     with torch.no_grad():

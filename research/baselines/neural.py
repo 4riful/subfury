@@ -1,6 +1,6 @@
-"""Adapter that puts the SubFury v2 transformer behind the shared Ranker API.
+"""Adapter that puts the beam-search SubFury transformer behind the shared Ranker API.
 
-Wraps subfury_v2/predict.py without modifying it. Beam search is by far the
+Wraps subfury/predict.py without modifying it. Beam search is by far the
 slowest thing in the harness, so:
   * candidates are generated once per apex at the maximum budget and sliced
     for smaller N (the beam ordering is a single score ordering, so a
@@ -21,22 +21,22 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_V2 = os.path.join(REPO_ROOT, "subfury_v2")
+_V2 = os.path.join(REPO_ROOT, "subfury")
 if _V2 not in sys.path:
     sys.path.insert(0, _V2)
 
-DEFAULT_MODEL_DIR = os.path.join(REPO_ROOT, "results", "subfury_v2")
+DEFAULT_MODEL_DIR = os.path.join(REPO_ROOT, "results", "subfury")
 DEFAULT_CACHE = os.path.join(REPO_ROOT, "results", "research", "cache",
                              "neural_preds.json")
 
 
 class NeuralRanker:
-    """SubFury v2 (set-conditioned transformer, beam search)."""
+    """The beam-search model (set-conditioned transformer, beam search)."""
 
     prefix_consistent = True
 
     def __init__(self, model_dir: str = DEFAULT_MODEL_DIR, num_beams: int = 64,
-                 max_n: int = 200, name: str = "subfury-v2 (neural)",
+                 max_n: int = 200, name: str = "subfury-beam",
                  cache_path: str | None = DEFAULT_CACHE, verbose: bool = True):
         from predict import load_model, predict_labels  # noqa: E402
 

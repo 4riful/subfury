@@ -8,7 +8,7 @@ Every method — neural, statistical, wordlist — implements one interface:
 
 and is scored here, on exactly the same data, with exactly the same split.
 
-Protocol (matches subfury_v2/evaluate.py, made deterministic and reusable):
+Protocol (matches subfury/evaluate.py, made deterministic and reusable):
   * load data/groups_test.jsonl, keep apexes with >= MIN_LABELS labels
   * split each apex's labels into K (shown to the ranker) and H (withheld
     ground truth), ~50/50, deterministically seeded *per apex* so that the
@@ -102,7 +102,7 @@ def _apex_rng(apex: str, seed: int) -> np.random.Generator:
 
 def make_cases(groups: Sequence[dict], seed: int = DEFAULT_SEED) -> list[Case]:
     """Deterministic ~50/50 K/H split. Odd counts give the extra label to H,
-    matching subfury_v2/evaluate.py (half = len // 2 goes to K)."""
+    matching subfury/evaluate.py (half = len // 2 goes to K)."""
     cases = []
     for rec in groups:
         labels = list(rec["labels"])

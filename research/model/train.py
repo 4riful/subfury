@@ -1,9 +1,9 @@
-"""Train SubFury v3.  One loop, config-switched, so ablations differ in one thing.
+"""Train SubFury.  One loop, config-switched, so ablations differ in one thing.
 
-    python research/v3/train.py --encoder settrans --steps 4000
-    python research/v3/train.py --encoder deepsets --lambda-rank 0   # generator only
+    python research/model/train.py --encoder settrans --steps 4000
+    python research/model/train.py --encoder deepsets --lambda-rank 0   # generator only
 
-Every run writes results/v3/<tag>/{best.pt,config.json,log.jsonl} so the harness
+Every run writes results/runs/<tag>/{best.pt,config.json,log.jsonl} so the harness
 can score them side by side.
 """
 import argparse, json, math, os, sys, time
@@ -37,7 +37,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--train-jsonl", default="data/groups_train.jsonl")
     ap.add_argument("--val-jsonl", default="data/groups_val.jsonl")
-    ap.add_argument("--tokenizer", default="results/subfury_v2/tokenizer.json")
+    ap.add_argument("--tokenizer", default="results/subfury/tokenizer.json")
     ap.add_argument("--encoder", default="settrans", choices=["concat", "deepsets", "settrans"])
     ap.add_argument("--d-model", type=int, default=256)
     ap.add_argument("--n-head", type=int, default=4)
@@ -62,7 +62,7 @@ def main():
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--seed", type=int, default=1337)
     ap.add_argument("--tag", default=None)
-    ap.add_argument("--out-root", default="results/v3")
+    ap.add_argument("--out-root", default="results/runs")
     args = ap.parse_args()
 
     tag = args.tag or f"{args.encoder}-rank{args.lambda_rank:g}-prior{args.use_prior}"

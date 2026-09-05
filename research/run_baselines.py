@@ -2,7 +2,7 @@
 the shared harness, on one identical split.
 
     python3 research/run_baselines.py                 # baselines only
-    python3 research/run_baselines.py --neural        # + subfury-v2
+    python3 research/run_baselines.py --neural        # + the neural model
 
 Writes results/research/baselines.json and prints:
   * the comparison table (macro recall@N with bootstrap 95% CIs, MAP)
@@ -56,7 +56,7 @@ def main():
     ap.add_argument("--pool-size", type=int, default=512)
     ap.add_argument("--beam-width", type=int, default=2000)
     ap.add_argument("--neural", action="store_true",
-                    help="include the SubFury v2 transformer (needs torch + checkpoint)")
+                    help="include the beam-search SubFury transformer (needs torch + checkpoint)")
     ap.add_argument("--num-beams", type=int, default=64)
     ap.add_argument("--out", default=os.path.join(DEFAULT_OUT_DIR, "baselines.json"))
     args = ap.parse_args()

@@ -1,11 +1,11 @@
-"""SubFury v3 — set-conditioned, config-switched so the ablations are honest.
+"""SubFury — set-conditioned, config-switched so the ablations are honest.
 
 Every variant below shares one label encoder, one decoder and one training loop.
 The only thing that changes is how the known set is pooled into an organization
 representation, so a difference in the results table is a difference in that
 choice and not in forty incidental details.
 
-    encoder=concat   the v2 baseline: labels serialised into the decoder context,
+    encoder=concat   the beam-search baseline: labels serialised into the decoder context,
                      truncated to whatever fits.  Not a set model.
     encoder=deepsets mean/max pooling over per-label vectors.  Permutation
                      invariant by construction, unbounded |K|, no interaction
@@ -39,7 +39,7 @@ class V3Config:
     dec_layers: int = 4
     n_seeds: int = 4               # learned pooling queries (set transformer)
     max_label_tokens: int = 16
-    max_set: int = 512             # labels per organization; v2 managed 24
+    max_set: int = 512             # labels per organization; the beam-search model managed 24
     dropout: float = 0.1
     encoder: str = "settrans"      # concat | deepsets | settrans
     cand_vocab: int = 0            # size of the retrieval vocabulary, 0 = off

@@ -1169,7 +1169,6 @@ td .io{font-family:var(--mono);font-size:12px;color:var(--fg-3)}
 <header class="nav">
   <div class="brand">
     <img src="/static/subfury-mark.png" width="92" height="20" alt="SubFury" decoding="async">
-    <em>v2</em>
   </div>
 
   <nav class="tabs" aria-label="Sections">
@@ -1680,7 +1679,7 @@ const ci = a => a ? `[${a[0].toFixed(3)}, ${a[1].toFixed(3)}]` : '';
 const wordlistOf = bl => bl.methods.find(x => x.key.indexOf('wordlist:') === 0) || null;
 
 const METHOD_NAME = k =>
-  k === 'subfury-v2 (neural)' ? 'SubFury v2'
+  k === 'subfury-beam' ? 'SubFury · beam search'
   : k === 'frequency-prior' ? 'frequency prior'
   : k.indexOf('wordlist:') === 0 ? 'wordlist · ' + k.slice(9)
   : /^markov-\dgram$/.test(k) ? 'markov ' + k[7] + '-gram'
@@ -2000,7 +1999,7 @@ function modelVerdict(m) {
     return `<div class="vmain"><p class="vlabel">not measured</p>
       <p class="vsub">This checkpoint has no evaluation on file. Run
       <code>python research/run_baselines.py</code> for the full comparison, or
-      <code>python subfury_v2/evaluate.py -n 100 --out results/subfury_v2/eval.json</code>
+      <code>python subfury/evaluate.py -n 100 --out results/subfury/eval.json</code>
       for the wordlist number alone, and the measured figures appear here.</p></div>`;
   }
   return `<div class="vmain">
@@ -2964,7 +2963,7 @@ function handle(ev, d) {
         journeyNote(`beam: top ${merged.length} of ${cands} candidates kept`);
     }
     // a stage that never executed names no module: it did not produce anything
-    stageOpen('dns', $('resolve').checked ? 'subfury_v2/predict.py:resolve_all' : null,
+    stageOpen('dns', $('resolve').checked ? 'subfury/predict.py:resolve_all' : null,
               {candidates: cands, skipped: !$('resolve').checked});
     if (!$('resolve').checked)
       stageClose('dns', {resolved: 0, tested: 0, ran: false});
@@ -3324,7 +3323,7 @@ const M_NODES = [
    s:'Teaches the model an alphabet made of subdomain pieces.',
    why:'A model reads text in chunks. An English-trained chunker splits <code>staging</code> into nonsense like <code>st|aging</code>, because it was built for prose. Training the chunker on subdomains instead makes <code>api</code>, <code>staging</code> and <code>-prod</code> single units — so the model spends its capacity on naming patterns rather than on spelling.',
    detail:'It learns 4,096 chunks from the training names alone (a BPE vocabulary), splitting on dots and dashes so those stay meaningful.',
-   aff:["learn 4,096 pieces", "split on . and -"], io:[['reads','data/groups_train.jsonl'],['writes','results/subfury_v2/tokenizer.json']]},
+   aff:["learn 4,096 pieces", "split on . and -"], io:[['reads','data/groups_train.jsonl'],['writes','results/subfury/tokenizer.json']]},
 
   {id:'tokJson', lane:'train', kind:'art', ico:'i-file', t:'tokenizer.json',
    s:'The finished subdomain alphabet.',
@@ -3336,7 +3335,7 @@ const M_NODES = [
    s:'Shows the model half a company\'s names, asks for one it has not seen.',
    why:'This is the whole trick. The model is never rewarded for repeating names it was given — only for correctly guessing a name that was hidden. That forces it to learn the pattern connecting them instead of memorising a popularity list.',
    detail:'Each example reads <code>known₁ [SEP] known₂ … [DELIM] hidden_name [END]</code>, and the scoring only looks at what comes after <code>[DELIM]</code>. Which names count as "known" versus "hidden" is reshuffled every pass through the data, so one company teaches many different lessons.',
-   aff:["hide half the names", "guess the hidden one", "reshuffle each pass"], io:[['reads','groups_train.jsonl · tokenizer.json'],['writes','results/subfury_v2/best.pt']]},
+   aff:["hide half the names", "guess the hidden one", "reshuffle each pass"], io:[['reads','groups_train.jsonl · tokenizer.json'],['writes','results/subfury/best.pt']]},
 
   {id:'ckpt', lane:'train', kind:'art', ico:'i-chip', t:'best.pt',
    s:'The trained model — 7.8 million numbers.',
@@ -3348,7 +3347,7 @@ const M_NODES = [
    s:'Grades the model against an ordinary wordlist.',
    why:'A claim that this beats a wordlist is worth nothing unless it is measured the same way for both. This script gives each method an identical candidate budget on companies the model has never seen, and counts how many of the hidden names each one actually finds.',
    detail:'It runs on the 545 held-out companies with at least six names, so hiding half of them still leaves something meaningful to find. Results land in <code>eval.json</code>, which the Model tab reads directly — the interface never shows a number nobody measured.',
-   aff:["equal budget vs wordlist", "on unseen companies"], io:[['reads','groups_test.jsonl · best.pt'],['writes','results/subfury_v2/eval.json']]},
+   aff:["equal budget vs wordlist", "on unseen companies"], io:[['reads','groups_test.jsonl · best.pt'],['writes','results/subfury/eval.json']]},
 
   // ── every run ─────────────────────────────────────────────────────────────
   {id:'known', lane:'run', kind:'data', ico:'i-known', t:'1 · Known set',
@@ -3397,11 +3396,11 @@ const M_EDGES = [
 
 const MODULES = [
   ['data_prep.py',       'Build apex-grouped datasets from the host graph', 'data/cc/*.gz',            'data/groups_{train,val,test}.jsonl'],
-  ['tokenizer_train.py', 'Train the subdomain BPE',                          'data/groups_train.jsonl', 'results/subfury_v2/tokenizer.json'],
+  ['tokenizer_train.py', 'Train the subdomain BPE',                          'data/groups_train.jsonl', 'results/subfury/tokenizer.json'],
   ['model.py',           'The decoder itself + beam search',                 '—',                       'in-memory logits, ranked candidates'],
-  ['train.py',           'Set-conditioned training loop',                    'groups_train · tokenizer','results/subfury_v2/best.pt'],
+  ['train.py',           'Set-conditioned training loop',                    'groups_train · tokenizer','results/subfury/best.pt'],
   ['predict.py',         'Conditioning, generation, DNS resolution',         'best.pt · tokenizer',     'candidate labels, resolved hosts'],
-  ['evaluate.py',        'recall@N vs the wordlist baseline',                'groups_test · best.pt',   'results/subfury_v2/eval.json'],
+  ['evaluate.py',        'recall@N vs the wordlist baseline',                'groups_test · best.pt',   'results/subfury/eval.json'],
   ['explain.py',         'Trace one prediction end to end (no DNS)',         'best.pt · tokenizer',     'stdout walkthrough'],
   ['webui/app.py',       'HTTP API + SSE stream behind this interface',      'best.pt · passive sources','/api/model · /api/predict · /api/seed'],
 ];

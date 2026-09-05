@@ -1,7 +1,7 @@
 # Model Selection — Research Notes
 
-This documents *why* SubFury v2 uses the model it does, rather than defaulting
-to the original notebook's DistilGPT-2. Every decision below is backed by
+This documents *why* SubFury uses the model it does, rather than defaulting
+to a general-purpose pretrained LM such as DistilGPT-2. Every decision below is backed by
 contemporary tooling or literature.
 
 ## Task, restated
@@ -30,7 +30,7 @@ Candidates considered:
   O(n²) longer sequences and no reusable subword units. Robustness matters less
   here because we *train the tokenizer on the same distribution* we generate.
 - **Generic English BPE** (GPT-2's): fragments `staging`→`stag`+`ing`, wastes
-  vocab on natural language. This was v1's mistake.
+  vocab on natural language. This was the first attempt's mistake.
 - **Domain-specific BPE** (chosen): trained on the subdomain corpus itself, so
   `api`, `dev`, `mail`, `-prod`, `vpn` become single/few tokens → shorter
   sequences, faster inference, and the model reasons over meaningful units.
@@ -63,7 +63,7 @@ first-class tokens.
 
 ## Decision 5 — Decoding → **deterministic beam search**
 
-v1 used temperature sampling (temp 0.7), which is the wrong objective: we want
+The first attempt used temperature sampling (temp 0.7), which is the wrong objective: we want
 the *N most probable* labels to minimize wasted DNS queries, not diverse samples.
 Beam search (subwiz's choice) returns a ranked candidate list directly. Temperature
 remains available for exploration but defaults to greedy/beam.

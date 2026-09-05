@@ -1,4 +1,4 @@
-"""SubFury v2 web UI — FastAPI backend.
+"""SubFury web UI — FastAPI backend.
 
     python webui/app.py            # http://127.0.0.1:8000
 
@@ -20,15 +20,15 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "subfury_v2"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "subfury"))
 
 from predict import LABEL_RE, load_model, predict_labels, resolve_all  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.environ.get("SUBFURY_MODEL",
-                           os.path.join(HERE, "..", "results", "subfury_v2"))
+                           os.path.join(HERE, "..", "results", "subfury"))
 
-app = FastAPI(title="SubFury v2")
+app = FastAPI(title="SubFury")
 _state = {}
 
 
@@ -106,7 +106,7 @@ CT_JSONL = os.path.join(REPO, "research", "data", "ct_observations.jsonl")
 
 # the one method every other method is scored against
 REFERENCE = "frequency-prior"
-MODEL_METHOD = "subfury-v2 (neural)"
+MODEL_METHOD = "subfury-beam"
 _SHORT_LABEL_CHARS = 2      # "one or two characters", the corpus-divergence cut
 
 
@@ -754,9 +754,9 @@ async def seed(domain: str):
 # reconstruction from the order things appeared on screen.
 
 MOD_PIPELINE = "webui/app.py:run_pipeline"
-MOD_PREDICT = "subfury_v2/predict.py:predict_labels"
-MOD_DECODE = "subfury_v2/model.py:beam_search"
-MOD_RESOLVE = "subfury_v2/predict.py:resolve_all"
+MOD_PREDICT = "subfury/predict.py:predict_labels"
+MOD_DECODE = "subfury/model.py:beam_search"
+MOD_RESOLVE = "subfury/predict.py:resolve_all"
 
 
 async def run_pipeline(req: PredictRequest):

@@ -17,13 +17,13 @@
   "held_out_labels": 4839,
   "mean_known": 8.475229357798165,
   "mean_holdout": 8.878899082568807,
-  "generated": "2026-09-06T04:53:04",
+  "generated": "2026-09-06T05:31:34",
   "results": [
     {
       "name": "settrans-full/hybrid",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 84.11,
+      "seconds": 92.18,
       "map": 0.05564909367649682,
       "map_ci95": [
         0.04459749052839854,
@@ -89,7 +89,7 @@
       "name": "settrans-full/generator",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 84.06,
+      "seconds": 84.3,
       "map": 0.03397392066201175,
       "map_ci95": [
         0.023987088955192182,
@@ -155,7 +155,7 @@
       "name": "settrans-full/retriever",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 9.61,
+      "seconds": 9.91,
       "map": 0.06379118251890253,
       "map_ci95": [
         0.052211575098238004,
@@ -221,7 +221,7 @@
       "name": "deepsets-full/hybrid",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 89.08,
+      "seconds": 92.5,
       "map": 0.0656186936454282,
       "map_ci95": [
         0.05354516351104552,
@@ -287,7 +287,7 @@
       "name": "deepsets-full/generator",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 77.99,
+      "seconds": 81.93,
       "map": 0.04283057660930413,
       "map_ci95": [
         0.03125474160088458,
@@ -353,7 +353,7 @@
       "name": "deepsets-full/retriever",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 7.44,
+      "seconds": 7.61,
       "map": 0.07585093986108203,
       "map_ci95": [
         0.06283610843038265,
@@ -419,7 +419,7 @@
       "name": "settrans-gen/generator",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 77.62,
+      "seconds": 84.45,
       "map": 0.017148434769198213,
       "map_ci95": [
         0.012968119700880932,
@@ -485,7 +485,7 @@
       "name": "settrans-noprior/hybrid",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 82.66,
+      "seconds": 91.97,
       "map": 0.05374221421940432,
       "map_ci95": [
         0.04328642948196486,
@@ -551,7 +551,7 @@
       "name": "settrans-noprior/generator",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 78.34,
+      "seconds": 78.24,
       "map": 0.03819314900265589,
       "map_ci95": [
         0.027912200376959784,
@@ -617,7 +617,7 @@
       "name": "settrans-noprior/retriever",
       "apexes": 545,
       "held_out_labels": 4839,
-      "seconds": 8.09,
+      "seconds": 8.1,
       "map": 0.06312992141317982,
       "map_ci95": [
         0.051226900789934214,

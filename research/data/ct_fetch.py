@@ -39,7 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 CACHE_DIR = os.path.join(HERE, "cache")
 
-# same grammar the model's label vocabulary uses (subfury_v2/predict.py)
+# same grammar the model's label vocabulary uses (subfury/predict.py)
 LABEL_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$")
 
 UA = "subfury-research/0.1 (+temporal CT eval; passive only)"

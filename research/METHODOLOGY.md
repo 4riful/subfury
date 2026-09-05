@@ -4,10 +4,10 @@
 Numbers were re-derived from the artifacts for this document rather than copied from prior summaries;
 where a re-derivation disagreed with a circulating figure, the disagreement is stated (see §2.4).
 
-**Scope:** this describes what has been measured on SubFury v2 and the baselines, what those
+**Scope:** this describes what has been measured on the beam-search model and the baselines, what those
 measurements do to the original research hypothesis, and the protocol for the work that follows.
-§7.1 carries measured v3 results for axes A1 (partial), A2 and A3 (partial);
-A4, A5 and A6 have not been run, and every v3 claim outside §7.1 is a design
+§7.1 carries measured retrieval-model results for axes A1 (partial), A2 and A3 (partial);
+A4, A5 and A6 have not been run, and every retrieval-model claim outside §7.1 is a design
 rationale rather than a result. One pre-registered falsifier has fired — the
 fusion scorer — and is recorded as such in §7.1 and §8.
 
@@ -20,7 +20,7 @@ fusion scorer — and is recorded as such in §7.1 and §8.
 An organisation owns a set of hostnames under an apex domain `d`. Write each hostname as
 `ℓ.d` where `ℓ` is a *label* (which may itself contain dots: `api.staging` under `example.com`).
 Let `L(d) ⊆ Σ*` be the complete, unobservable set of labels the organisation actually operates,
-over the DNS label alphabet `Σ = [a-z0-9-.]` under the grammar in `subfury_v2/predict.py:LABEL_RE`.
+over the DNS label alphabet `Σ = [a-z0-9-.]` under the grammar in `subfury/predict.py:LABEL_RE`.
 
 A discovery process observes a subset `K ⊂ L(d)` — from passive sources: Common Crawl, Certificate
 Transparency, passive DNS. `K` is **unordered**: it is a set of strings with no canonical sequence,
@@ -81,10 +81,10 @@ Corpus: `data/groups_test.jsonl` — **545 apexes**, **4,839 held-out labels**, 
 mean `|H|` **8.88** (`results/research/baselines.json`, fields `apexes`, `held_out_labels`,
 `mean_known`, `mean_holdout`).
 
-The system under test is SubFury v2 (`subfury_v2/model.py`, `results/subfury_v2/best.pt`):
+The system under test is the beam-search model (`subfury/model.py`, `results/subfury/best.pt`):
 a 6-layer, 6-head, `n_embd=300`, `block_size=192`, 4096-BPE decoder-only transformer,
 **9,019,200 parameters**, checkpoint at step 3504, `val_loss` 5.0339. It conditions by serialising
-`sorted(K)[-24:]` into the causal context (`subfury_v2/predict.py:predict_labels`,
+`sorted(K)[-24:]` into the causal context (`subfury/predict.py:predict_labels`,
 `block_size // 8 = 24`) and beam-searching with 64 beams and no length penalty.
 
 ### 2.1 The budget crossover: the model wins small budgets and loses large ones
@@ -98,7 +98,7 @@ a 6-layer, 6-head, `n_embd=300`, `block_size=192`, 4096-BPE decoder-only transfo
 | markov-3gram | 0.029 | 0.047 | 0.073 | 0.117 | 0.145 | 0.0202 | 200/545 |
 | markov-4gram | 0.059 | 0.090 | 0.122 | 0.154 | 0.194 | 0.0356 | 256/545 |
 | markov-5gram | 0.057 | 0.098 | 0.132 | 0.175 | 0.224 | 0.0369 | 296/545 |
-| **subfury-v2 (neural)** | **0.114** [0.095,0.134] | **0.172** | **0.207** | **0.216** | 0.217 | **0.0968** | 264/545 |
+| **subfury-beam** | **0.114** [0.095,0.134] | **0.172** | **0.207** | **0.216** | 0.217 | **0.0968** | 264/545 |
 
 The frequency prior is fitted on `data/groups_train.jsonl` over **494,934** distinct labels, ranked by
 number of distinct organisations using each label, with the apex's own known labels removed before
@@ -107,7 +107,7 @@ Its top-10 is `blog, m, app, es, fr, de, support, it, ru, my` — not a hand-cur
 corpus-fitted popularity model. It is the baseline that matters; the wordlist is not.
 
 Paired bootstrap over the same 545 apexes (`results/research/baselines.json`,
-`paired_vs_frequency_prior["subfury-v2 (neural)"]`), model **minus** prior:
+`paired_vs_frequency_prior["subfury-beam"]`), model **minus** prior:
 
 | N | Δ recall | 95% CI | bootstrap p (two-sided) |
 |---|---|---|---|
@@ -127,8 +127,8 @@ tight. Some of the flattening is literal exhaustion: the neural ranker returned 
 distinct valid candidates on **7 of 545** apexes (`results/research/baselines.json`,
 `results[5].notes.apexes_short_of_budget`); the rest is the beam collapsing onto near-duplicates.
 
-The end-to-end run in `results/subfury_v2/eval.json` (the same 545 apexes but the older
-`subfury_v2/evaluate.py` split, seed 42, against the n0kovo wordlist rather than a fitted prior)
+The end-to-end run in `results/subfury/eval.json` (the same 545 apexes but the older
+`subfury/evaluate.py` split, seed 42, against the n0kovo wordlist rather than a fitted prior)
 reports model 0.175 / 0.210 / 0.220 / 0.221 at N = 25/50/100/200, agreeing with the harness to within
 0.004 and showing the same saturation. **Its baseline column (0.028 → 0.142) is the wordlist, not the
 prior, and should not be quoted as evidence the model beats popularity.** That comparison is why the
@@ -191,8 +191,8 @@ proposed:
 Lift is non-monotone and never exceeds 0.076. There is no regime in which more known hostnames buy
 proportionally more conditioning-driven recall.
 
-**Consequence for architecture.** v2 sorts `K` before truncating
-(`subfury_v2/predict.py`: `sorted(known)[-block_size // 8:]`) and SubWiz sorts before comma-joining
+**Consequence for architecture.** the beam-search model sorts `K` before truncating
+(`subfury/predict.py`: `sorted(known)[-block_size // 8:]`) and SubWiz sorts before comma-joining
 (`research/related-work.md` §2: `",".join(sorted(subs))`). **Both incumbent methods are already
 order-canonical.** A permutation-invariant encoder therefore cannot claim an empirical win over them
 on the grounds of invariance, and the truncation it would remove costs, on this evidence, nothing.
@@ -204,7 +204,7 @@ The measurement says truncation is harmless at 2× the window; it does not say i
 
 ### 2.4 The corpus the model was trained on does not look like the corpus it will be deployed against
 
-Training and evaluation data come from the Common Crawl host graph via `subfury_v2/data_prep.py`.
+Training and evaluation data come from the Common Crawl host graph via `subfury/data_prep.py`.
 Deployment seeds come from Certificate Transparency (`webui/app.py`, `research/data/ct_fetch.py`).
 Recomputed from the artifacts:
 
@@ -223,7 +223,7 @@ Two lists that barely overlap. Common Crawl's head is dominated by **language an
 **operational infrastructure** (`www, test, api, mail, demo, status, staging, vpn, admin`) — what a
 security engineer is actually looking for.
 
-**And `www` cannot be predicted at all.** `subfury_v2/data_prep.py` drops it by construction:
+**And `www` cannot be predicted at all.** `subfury/data_prep.py` drops it by construction:
 
 ```python
 if label == "www" or len(label) > MAX_LABEL_LEN:
@@ -293,7 +293,7 @@ on the reachable subset (`reachable_table`):
 | method | r@10 | r@25 | r@50 | r@100 | r@200 | MAP |
 |---|---|---|---|---|---|---|
 | frequency-prior [reachable] | 0.060 | 0.116 | 0.155 | 0.207 | 0.274 | 0.0418 |
-| subfury-v2 [reachable] | 0.133 | 0.199 | 0.240 | 0.251 | 0.252 | 0.1123 |
+| subfury-beam [reachable] | 0.133 | 0.199 | 0.240 | 0.251 | 0.252 | 0.1123 |
 
 The crossover survives restriction to reachable apexes; the prior still overtakes between N=100 and
 N=200. Excluding the unwinnable apexes raises both methods ~15% relative and changes no conclusion.
@@ -303,7 +303,7 @@ Micro vs macro (`micro_table`) — micro weights apexes by how many labels they 
 | method | @10 macro/micro | @50 macro/micro | @200 macro/micro |
 |---|---|---|---|
 | frequency-prior | 0.052 / 0.038 | 0.134 / 0.111 | 0.236 / 0.219 |
-| subfury-v2 | 0.114 / 0.093 | 0.207 / 0.194 | 0.217 / 0.205 |
+| subfury-beam | 0.114 / 0.093 | 0.207 / 0.194 | 0.217 / 0.205 |
 
 Micro is uniformly lower for both: **both methods do relatively worse on the apexes with the most to
 find**, which are exactly the ones an operator cares about. Report both, always.
@@ -328,13 +328,13 @@ architectural intuition was.
 
 ### 2.8 Divergence: conditioning changes the output, but not enough of it
 
-`results/subfury_v2/divergence.json` — six synthetic 24-label "profile" prompts (dev, monitoring,
+`results/subfury/divergence.json` — six synthetic 24-label "profile" prompts (dev, monitoring,
 ecommerce, infra, media, neutral), top-50 each, 128 beams. Pairwise Jaccard between output lists:
 **min 0.408, max 0.786, mean 0.565**. `seed_driven_share` — the fraction of the top-50 that is not in
 every other profile's list — is 0.24–0.32. Two organisations with completely different infrastructure
 profiles receive lists that are more than half identical.
 
-`results/subfury_v2/divergence_real.json` — the same measurement on six real apexes with real seeds
+`results/subfury/divergence_real.json` — the same measurement on six real apexes with real seeds
 (`|K|` 7–20): pairwise Jaccard **min 0.010, max 0.786, mean 0.200**, and `seed_driven_share` spanning
 **0.16 (leafphp.dev) to 0.94 (hanke100.com)**.
 
@@ -353,7 +353,7 @@ given apex falls into. n=6; this is an observation, not a result.
 The question presumed that the incumbents impose a *meaningful* order on `K` that a set encoder would
 remove. They do not:
 
-- v2 conditions on `sorted(known)[-24:]` (`subfury_v2/predict.py`) — sorted, hence a canonical order,
+- the beam-search model conditions on `sorted(known)[-24:]` (`subfury/predict.py`) — sorted, hence a canonical order,
   hence already invariant to the input's presentation order.
 - SubWiz builds `apex + "[DELIM]" + ",".join(sorted(subs)) + "[DELIM]"`
   (`research/related-work.md` §2, verified against `subwiz/main.py`) — also sorted.
@@ -364,14 +364,14 @@ sorting-plus-truncation discards information a set encoder would keep — is con
 `results/research/capacity.json`: median per-apex spread across six different 24-label windows is
 **0.000**.
 
-`research/v3/test_invariance.py` verifies the v3 encoders are invariant to machine precision
+`research/model/test_invariance.py` verifies the retrieval model encoders are invariant to machine precision
 (deepsets max Δ **7.15e-07**, settrans **8.34e-07**, padding leak **9.54e-07**, `|K|` accepted up to
 512). That is a correctness property of the implementation. **It is not a research contribution and
 must not be reported as one.** Any paper claiming a set-encoder win must show it against a
 *sorted-concatenation* baseline on identical data — which is what `encoder="concat"` in
-`research/v3/model.py` exists to provide — and must expect the difference to be small.
+`research/model/model.py` exists to provide — and must expect the difference to be small.
 
-The residual, defensible version of the claim: v2's context is capped at 24 labels; deployment seeds
+The residual, defensible version of the claim: the beam-search model's context is capped at 24 labels; deployment seeds
 reach 500–700; a set encoder removes that cap architecturally (`V3Config.max_set = 512`). That is an
 **engineering** justification with a measured cost of approximately zero at the sizes tested. Ship it,
 do not headline it.
@@ -385,7 +385,7 @@ Restated as testable sub-questions:
 
 - **RQ1 (marginal value of set size).** Does recall@N increase monotonically in `|K|` when the encoder
   can see all of `K`? Measured by conditioning on `K` truncated to 1, 2, 4, 8, 16, 32, 64, 128 labels
-  and reading the curve. v2's curve is flat after 1; a set encoder that does not bend it has failed.
+  and reading the curve. the beam-search model's curve is flat after 1; a set encoder that does not bend it has failed.
 - **RQ2 (the objective, not the architecture).** Cross-entropy over labels rewards predicting
   *frequent* labels. There is no term in `L = CE(y | K)` that rewards predicting a label the global
   prior would have missed — and §2.7 shows 68–80% of the model's value lies precisely there. Does a
@@ -407,21 +407,21 @@ transformer LM for subdomains is new (SubWiz, 2024).
 
 ---
 
-## 4. The v3 design, with the measurement each part answers to
+## 4. The retrieval model design, with the measurement each part answers to
 
-`research/v3/model.py`. Every component is config-switched off one shared label encoder, decoder and
+`research/model/model.py`. Every component is config-switched off one shared label encoder, decoder and
 training loop, so an ablation moves exactly one variable.
 
 | Component | Config | The measurement that requires it |
 |---|---|---|
-| **Set encoder over unbounded `|K|`** (`deepsets` = mean/max pool; `settrans` = self-attention + learned-query pooling; `concat` = the v2 sorted-context baseline) | `encoder`, `max_set=512`, `n_seeds=4` | §2.3: v2 sees 24 of up to 700 labels. Median window spread 0.000 says the cap is *currently* free — but the cap is why `|K|` cannot be a variable at all, and RQ1 needs it to be. `concat` exists so the comparison is against v2's actual conditioning, not a strawman. |
+| **Set encoder over unbounded `|K|`** (`deepsets` = mean/max pool; `settrans` = self-attention + learned-query pooling; `concat` = the beam-search model sorted-context baseline) | `encoder`, `max_set=512`, `n_seeds=4` | §2.3: the beam-search model sees 24 of up to 700 labels. Median window spread 0.000 says the cap is *currently* free — but the cap is why `|K|` cannot be a variable at all, and RQ1 needs it to be. `concat` exists so the comparison is against the beam-search model's actual conditioning, not a strawman. |
 | **Retrieval head** — scores a fixed candidate vocabulary against the org vector (`retrieve_scores`, `cand_vocab`) | `cand_vocab > 0` | §2.1: generation is flat past N=50 (0.207 → 0.217) while the prior climbs to 0.236 at N=200 and 0.274 on the reachable subset. Generation cannot fill a large budget; retrieval can — **confirmed by A2** (§7.1), which also **refuted** the second half of this rationale: §2.7's union-beats-both result did not survive, the fused hybrid scores at or below the retriever alone at every budget. |
 | **Generator head** — autoregressive over BPE, cross-attending set memory | always on | §2.6: **42.4%** of held-out labels are outside the training vocabulary. Retrieval alone is capped at 57.6% macro recall. Removing the generator forfeits that headroom. |
 | **Ranking loss against prior logits** — `s = s − prior_logits` before the contrastive term (`loss(..., prior_logits=...)`) | `lambda_rank` | §2.1 + §2.7: cross-entropy has no pressure to beat popularity; a model that perfectly learns `P(y)` scores well under CE and loses to the prior at N=200. Subtracting prior logits makes the objective *"score above popularity"* — the quantity §2.7 measures as `lift`, and the one the model is losing on. |
 | **Sampled negatives only** — unobserved labels are not treated as negatives | `cand_neg` in the batch | The ground truth is a *withheld half*; an unobserved label is unknown, not absent. Treating it as a negative would train the model to suppress correct answers, and would make the 42.4% out-of-vocabulary tail actively harder. |
 
 Note what is *not* in the list: nothing is justified by permutation invariance. Invariance is a
-property the implementation must have and `research/v3/test_invariance.py` asserts; it is not a reason
+property the implementation must have and `research/model/test_invariance.py` asserts; it is not a reason
 for any design decision above.
 
 ---
@@ -473,7 +473,7 @@ things that distinguish conditioning from recitation.
 
 | Diagnostic | Script | Reports | Failure condition |
 |---|---|---|---|
-| **Swap** | `research/diagnostic/swap.py` | recall under own / single / swapped / generic conditioning; paired `own − swapped` | `own ≈ swapped` ⇒ the model is reciting a prior. `own ≈ single` ⇒ conditioning saturates at one label (v2's current state, §2.3). |
+| **Swap** | `research/diagnostic/swap.py` | recall under own / single / swapped / generic conditioning; paired `own − swapped` | `own ≈ swapped` ⇒ the model is reciting a prior. `own ≈ single` ⇒ conditioning saturates at one label (the beam-search model's current state, §2.3). |
 | **Decomposition** | `research/diagnostic/decompose.py` | model / prior / union / lift / overlap / novel_frac per budget, and lift bucketed by `|K|` | lift not increasing with `|K|` ⇒ RQ1 unmet. union > model ⇒ the hybrid is leaving recall on the table. |
 | **Capacity** | `research/diagnostic/capacity.py` | recall across tail / head / spread / random windows of `K`; per-apex spread | Large spread ⇒ truncation is discarding signal. Zero spread at large `|K|` ⇒ the encoder is not using set size, whatever its architecture. |
 
@@ -544,7 +544,7 @@ contacts the target.
 **Construct.** Recall@N against a withheld half of Common Crawl hostnames is *set completion*, not
 discovery. It measures whether a method can reconstruct the half of an organisation's already-crawled
 footprint it was not shown. It does not measure whether the method finds hosts nobody has crawled,
-which is the deployment task. `subfury_v2/evaluate.py`'s docstring is correct on this; the framing
+which is the deployment task. `subfury/evaluate.py`'s docstring is correct on this; the framing
 must not drift toward "predicting future hostnames" — that claim requires §5.5's temporal split.
 
 **Corpus.** §2.4. The training distribution is language/country-code-heavy and `www`-free; the
@@ -559,7 +559,7 @@ against 100% is meaningless.
 
 **Statistical.** CIs are percentile bootstraps over apexes, which handles between-apex variance but
 not the two model-side sources: a single training run (no seed variance is reported anywhere in this
-document — every neural number comes from one checkpoint, `results/subfury_v2/best.pt`) and beam
+document — every neural number comes from one checkpoint, `results/subfury/best.pt`) and beam
 search's determinism-but-brittleness. The diagnostics use smaller samples: swap n=100, lengthbias
 n=80, capacity n=30, divergence n=6. Capacity's median-0.000 result is robust to n; divergence's is
 not, and is labelled an observation.
@@ -595,11 +595,11 @@ full §5.3 companion reporting. Order is by information gained per GPU-hour.
 
 | # | Axis | Arms | Status | Question it answers | What would kill the design |
 |---|---|---|---|---|---|
-| **A1** | Encoder | `concat` (v2-equivalent) / `deepsets` / `settrans` | **partial** — `deepsets` and `settrans` run; `concat` not run | Does a set encoder beat sorted concatenation on identical data and budget? (§3.1) | `concat ≈ settrans` at every N ⇒ the encoder is not the differentiator; report it as such and move the claim to A3. |
+| **A1** | Encoder | `concat` (beam-search-equivalent) / `deepsets` / `settrans` | **partial** — `deepsets` and `settrans` run; `concat` not run | Does a set encoder beat sorted concatenation on identical data and budget? (§3.1) | `concat ≈ settrans` at every N ⇒ the encoder is not the differentiator; report it as such and move the claim to A3. |
 | **A2** | Channels | generation only / retrieval only / hybrid | **run** — all three arms | Does the hybrid beat both channels? Retrieval-only is bounded at **57.6%** macro (§2.6); generation-only saturates by N=50 (§2.1). | Hybrid ≤ max(channels) at every N ⇒ the fusion scorer is broken, not the idea. |
 | **A3** | Objective | CE only / CE + ranking loss / CE + ranking loss **against prior logits** | **partial** — prior-relative and non-prior-relative run; CE-only not run | Is saturation an objective problem rather than an architecture problem? (RQ2) | No change in `lift` or in the `|K|` slope ⇒ the prior-relative objective is not the mechanism; look at the data. |
-| **A4** | Set size | `\|K\|` truncated to 1 / 2 / 4 / 8 / 16 / 32 / 64 / 128 | **not run** — still the decisive test | **The decisive test.** Does recall increase monotonically in `\|K\|`? v2's curve is flat after 1 (§2.3). | Flat curve for v3 ⇒ the replacement hypothesis (§3.2) is falsified and the project's premise is wrong. |
-| **A5** | Decoding | α ∈ {0, 0.6, 0.8, 1.0} × minlen ∈ {1, 2, 3} | **not run** on v3 | Re-run of §2.5 on the new model. Does a corpus with a realistic short-label share change the answer? | If α>0 still hurts on Common Crawl but helps on CT, that is the corpus-mismatch finding confirmed, and it belongs in the paper. |
+| **A4** | Set size | `\|K\|` truncated to 1 / 2 / 4 / 8 / 16 / 32 / 64 / 128 | **not run** — still the decisive test | **The decisive test.** Does recall increase monotonically in `\|K\|`? the beam-search model's curve is flat after 1 (§2.3). | Flat curve for the retrieval model ⇒ the replacement hypothesis (§3.2) is falsified and the project's premise is wrong. |
+| **A5** | Decoding | α ∈ {0, 0.6, 0.8, 1.0} × minlen ∈ {1, 2, 3} | **not run** on the retrieval model | Re-run of §2.5 on the new model. Does a corpus with a realistic short-label share change the answer? | If α>0 still hurts on Common Crawl but helps on CT, that is the corpus-mismatch finding confirmed, and it belongs in the paper. |
 | **A6** | Corpus | train on Common Crawl / train on CT / train on both | **not run** — CT corpus still being fetched | Isolates §2.4. Is the model's weakness the architecture or the training distribution? | CT-trained ≈ CC-trained on CT eval ⇒ the mismatch is not load-bearing and §2.4 is over-weighted here. |
 
 **A4 runs first if compute is scarce.** It is the cheapest — it needs no retraining, only re-evaluation
@@ -608,7 +608,7 @@ at truncated `|K|` — and it is the only one that can falsify the project's pre
 
 ### 7.1 The four runs that have been executed
 
-`results/research/v3_ablation.json`, `results/research/v3_vs_v2_paired.json`.
+`results/research/ablation.json`, `results/research/paired_vs_beam.json`.
 Trained on the uncapped Common Crawl corpus (52,508 apexes; 13,272 with more
 than 24 labels, so `max_set` is exercised by real data), scored through
 `research/harness.py` on the same 545 apexes, seed-1337 split and budgets as
@@ -629,17 +629,17 @@ settrans-noprior/generator       0.048 [0.035,0.061]     0.091 [0.074,0.108]    
 settrans-noprior/retriever       0.082 [0.066,0.098]     0.117 [0.096,0.138]     0.134 [0.114,0.156]     0.155 [0.133,0.179]     0.180 [0.157,0.207]    0.0631       211/545
 ```
 
-Paired against v2 — same apexes, so between-apex variance cancels:
+Paired against the beam-search model — same apexes, so between-apex variance cancels:
 
 ```
-v3 variant vs subfury-v2                                 @10                       @25                       @50                      @100                      @200
+variant vs beam-search model                                       @10                       @25                       @50                      @100                      @200
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------
-deepsets-full/retriever              -0.015 [-0.024,-0.006]*   -0.026 [-0.037,-0.016]*   -0.023 [-0.033,-0.013]*   +0.016 [+0.005,+0.028]*   +0.043 [+0.031,+0.055]*
-deepsets-full/hybrid                 -0.019 [-0.028,-0.010]*   -0.031 [-0.041,-0.021]*   -0.023 [-0.033,-0.014]*   +0.011 [-0.000,+0.021]    +0.041 [+0.030,+0.053]*
-settrans-full/retriever              -0.028 [-0.039,-0.018]*   -0.036 [-0.048,-0.023]*   -0.030 [-0.043,-0.017]*   +0.003 [-0.010,+0.016]    +0.035 [+0.022,+0.048]*
-settrans-noprior/retriever           -0.032 [-0.042,-0.024]*   -0.055 [-0.068,-0.043]*   -0.073 [-0.087,-0.060]*   -0.061 [-0.075,-0.048]*   -0.037 [-0.050,-0.024]*
+deepsets-full/retriever                        -0.015 [-0.024,-0.006]*   -0.026 [-0.037,-0.016]*   -0.023 [-0.033,-0.013]*   +0.016 [+0.005,+0.028]*   +0.043 [+0.031,+0.055]*
+deepsets-full/hybrid                           -0.019 [-0.028,-0.010]*   -0.031 [-0.041,-0.021]*   -0.023 [-0.033,-0.014]*   +0.011 [-0.000,+0.021]    +0.041 [+0.030,+0.053]*
+settrans-full/retriever                        -0.028 [-0.039,-0.018]*   -0.036 [-0.048,-0.023]*   -0.030 [-0.043,-0.017]*   +0.003 [-0.010,+0.016]    +0.035 [+0.022,+0.048]*
+settrans-noprior/retriever                     -0.032 [-0.042,-0.024]*   -0.055 [-0.068,-0.043]*   -0.073 [-0.087,-0.060]*   -0.061 [-0.075,-0.048]*   -0.037 [-0.050,-0.024]*
 
-* = paired 95% CI excludes zero.  Positive favours v3.
+* = paired 95% CI excludes zero.  Positive favours the retrieval architecture.
 ```
 
 **A2 — the pre-registered kill criterion fired.** §7's A2 row states: *"Hybrid ≤
@@ -648,20 +648,20 @@ max(channels) at every N ⇒ the fusion scorer is broken, not the idea."* For
 0.096/0.100, 0.141/0.145, 0.184/0.184, 0.227/0.232, 0.258/0.260 — and the same
 holds for `settrans-full`. The falsifier list in §8 says the same thing from the
 other direction. **The fusion scorer is therefore reported as broken.** The
-components are not: the retriever alone is the best v3 configuration measured.
+components are not: the retriever alone is the best the retrieval model configuration measured.
 This is a pre-registered negative result, not a tuning opportunity, and it must
 not be renegotiated by searching for a fusion weight that reverses it.
 
-**A2 — generation cannot fill a budget, and this is now measured on v3 as well
-as v2.** Every generator arm is flat from N=50 onward (`deepsets-full`:
+**A2 — generation cannot fill a budget, and this is now measured on the retrieval model as well
+as the beam-search model.** Every generator arm is flat from N=50 onward (`deepsets-full`:
 0.119 → 0.122 → 0.123). The retriever arms keep climbing to N=200. §2.1
-attributed v2's saturation to beam exhaustion rather than to the model; a
+attributed the beam-search model's saturation to beam exhaustion rather than to the model; a
 second architecture reproducing it on the same split supports that reading.
 
 **A3 — subtracting the prior improves recall while making the loss look worse.**
 `settrans-noprior` recorded the *best* validation ranking loss of the four runs
 (3.010 against 3.877 for `settrans-full`) and is the *worst* ranker at every
-budget, losing to v2 at all five. This is the §4 argument confirmed by
+budget, losing to the beam-search model at all five. This is the §4 argument confirmed by
 measurement: cross-entropy rewards reproducing `P(y)`, and a model that does so
 scores well on the loss and adds nothing over the prior. Had A3 not been run,
 the better validation loss would have selected the worse model.
@@ -674,7 +674,7 @@ alone does not.
 
 **A1 — Deep Sets beats the Set Transformer at every budget**, and the A1
 falsifier cannot yet be evaluated: `concat`, the arm that would show whether a
-set encoder beats v2's sorted concatenation *at all*, has not been run. Until it
+set encoder beats the beam-search model's sorted concatenation *at all*, has not been run. Until it
 is, no claim in §4 about the set encoder is supported by an ablation.
 
 **Cost.** Retriever-only evaluation of 545 apexes takes 7–10s; every arm that
@@ -686,11 +686,11 @@ is also the cheapest by an order of magnitude.
 - They train on Common Crawl, so they inherit §2.4 in full. They are an
   architecture result on a benchmark already established as mismatched to the
   use case, and they say nothing about the operational failure that motivated
-  v3.
+  the retrieval model.
 - **A4 has not been run.** The `|K|` curve is the test that can falsify §3.2,
-  and no v3 number here bears on it. v3 currently has an unbounded set encoder
+  and no the retrieval model number here bears on it. the retrieval model currently has an unbounded set encoder
   whose benefit over one label is unmeasured.
-- No v3 number here was produced against live DNS, CT, or a temporal split.
+- No the retrieval model number here was produced against live DNS, CT, or a temporal split.
 
 ---
 
@@ -701,9 +701,9 @@ is also the cheapest by an order of magnitude.
 1. **Why does one label carry 90% of the conditioning benefit?** Three candidate mechanisms, currently
    indistinguishable: (i) intra-organisation labels are genuinely near-interchangeable as evidence, so
    there is little to extract; (ii) the objective gives no gradient for extracting more (RQ2);
-   (iii) the capacity is there but the training regime never demands it — `subfury_v2/train.py` samples
+   (iii) the capacity is there but the training regime never demands it — `subfury/train.py` samples
    `k ~ U[1, min(n−1, 12)]` known labels, so the model spends most of training on small `K` and rarely
-   sees a large set at all. **(iii) is testable immediately** by retraining v2 with a `|K|`-biased
+   sees a large set at all. **(iii) is testable immediately** by retraining the beam-search model with a `|K|`-biased
    sampler and re-running the swap diagnostic; if `single` drops relative to `own`, the saturation was
    a training-regime artifact and not an architectural limit.
 2. **A train/inference mismatch nobody has priced.** Training shuffles `K` and caps it at 12
@@ -713,7 +713,7 @@ is also the cheapest by an order of magnitude.
    but because the conditioning format at inference is out of distribution. **This confound must be
    resolved before the capacity result is cited as evidence about set encoders at all.**
 3. **What predicts an apex's `seed_driven_share`?** It ranges 0.16 to 0.94 across six real apexes
-   (`results/subfury_v2/divergence_real.json`). If it is predictable from `K`, the system can tell an
+   (`results/subfury/divergence_real.json`). If it is predictable from `K`, the system can tell an
    operator when to trust the model over the prior — which is worth more operationally than a recall
    point.
 4. **Is the crossover budget a property of this model or of generation-plus-beam-search generally?**
@@ -728,15 +728,15 @@ is also the cheapest by an order of magnitude.
 
 6. **Is saturation an objective problem or an architecture problem?** Partly the objective: the
    prior-relative ranking loss is worth +0.077 recall@200 over the same architecture without it
-   (0.260 against 0.180 on the retriever arm). But the generator saturates in v3 exactly as it did
-   in v2, so the *decoder* half of the saturation is architectural and the fix was to stop asking a
+   (0.260 against 0.180 on the retriever arm). But the generator saturates in the retrieval model exactly as it did
+   in the beam-search model, so the *decoder* half of the saturation is architectural and the fix was to stop asking a
    decoder to fill a 200-slot budget.
 7. **Does the hybrid beat its channels?** No. A2's kill criterion fired; see §7.1. Question 4 below
    is correspondingly sharpened rather than answered.
 
 **Falsifiers — stated in advance, so the result is not renegotiated after it arrives**
 
-- **A4 shows a flat `|K|` curve for v3.** If a set encoder with unbounded `|K|`, a prior-relative
+- **A4 shows a flat `|K|` curve for the retrieval model.** If a set encoder with unbounded `|K|`, a prior-relative
   ranking loss, and a retrieval channel *still* gets 90% of its benefit from one label, then the
   hypothesis in §3.2 is wrong: the information is not in the set. The correct conclusion is that a
   well-fitted global prior plus a small generative channel for the top-50 is the right system, and the
@@ -765,13 +765,13 @@ is also the cheapest by an order of magnitude.
 | `results/research/swap.json` | `research/diagnostic/swap.py` | 100 rows: own / single / swapped / generic conditioning |
 | `results/research/capacity.json` | `research/diagnostic/capacity.py` | 30 rows: six 24-label windows of the same `K` |
 | `results/research/lengthbias.json` | `research/diagnostic/lengthbias.py` | 12-cell α × minlen sweep, 80 apexes; short-label share |
-| `results/subfury_v2/eval.json` | `subfury_v2/evaluate.py` | End-to-end recall@N vs the n0kovo wordlist (**wordlist baseline, not the prior**) |
-| `results/subfury_v2/divergence.json` | — | 6 synthetic profile prompts, pairwise Jaccard |
-| `results/subfury_v2/divergence_real.json` | — | 6 real apexes with real seeds, pairwise Jaccard |
+| `results/subfury/eval.json` | `subfury/evaluate.py` | End-to-end recall@N vs the n0kovo wordlist (**wordlist baseline, not the prior**) |
+| `results/subfury/divergence.json` | — | 6 synthetic profile prompts, pairwise Jaccard |
+| `results/subfury/divergence_real.json` | — | 6 real apexes with real seeds, pairwise Jaccard |
 | `research/data/ct_observations.jsonl` | `research/data/ct_fetch.py` | 40 apexes, CT `first_seen` per label, wildcard/truncation stats |
 | `research/data/temporal.jsonl` | `research/data/build_temporal.py` | T=2024-07-01 split, 21 apexes, 4,969 known / 1,996 future |
 | `research/related-work.md` | literature lane | 14-work matrix, SubWiz's real numbers, novelty assessment, verification log |
 | `research/harness.py` | — | The evaluation contract (§5.1) |
-| `results/research/v3_ablation.json` | `research/v3/score_ablation.py` | 4 v3 runs × 3 channels × 5 budgets, bootstrap CIs, wall-clock per run |
-| `results/research/v3_vs_v2_paired.json` | `research/v3/paired_v2_v3.py` | Paired per-apex bootstrap of each v3 variant against subfury-v2 |
-| `research/v3/model.py`, `research/v3/test_invariance.py` | — | v3 architecture; invariance/size/padding assertions |
+| `results/research/ablation.json` | `research/model/score_ablation.py` | 4 retrieval-model runs × 3 channels × 5 budgets, bootstrap CIs, wall-clock per run |
+| `results/research/paired_vs_beam.json` | `research/model/paired_vs_beam.py` | Paired per-apex bootstrap of each the retrieval model variant against subfury-beam |
+| `research/model/model.py`, `research/model/test_invariance.py` | — | retrieval-model architecture; invariance/size/padding assertions |

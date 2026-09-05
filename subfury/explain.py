@@ -1,6 +1,6 @@
 """Trace one prediction end-to-end, exposing the internals at each stage.
 
-    python subfury_v2/explain.py --known api,dev,staging
+    python subfury/explain.py --known api,dev,staging
 
 Shows: tokenization -> conditioned prefix -> beam search with probabilities
 -> filtering. Purely illustrative; no DNS is performed.
@@ -17,7 +17,7 @@ from predict import LABEL_RE, load_model
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--known", default="api,dev,staging")
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     ap.add_argument("-n", "--topn", type=int, default=10)
     args = ap.parse_args()
 

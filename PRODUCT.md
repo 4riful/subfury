@@ -129,7 +129,7 @@ Mean per-apex recall@N:
 
 | Method | @10 | @25 | @50 | @100 | @200 |
 |---|---:|---:|---:|---:|---:|
-| SubFury v2 | **0.114** | **0.172** | **0.207** | **0.216** | 0.217 |
+| the beam-search model | **0.114** | **0.172** | **0.207** | **0.216** | 0.217 |
 | frequency prior (train split) | 0.052 | 0.100 | 0.134 | 0.179 | **0.236** |
 | Markov 5-gram | 0.057 | 0.098 | 0.132 | 0.175 | 0.224 |
 | Markov 4-gram | 0.059 | 0.090 | 0.122 | 0.154 | 0.194 |
@@ -153,10 +153,10 @@ tight, and does not where it is loose.
 The frequency prior is the baseline that matters — same training data, zero
 parameters. The n0kovo wordlist is the weakest control on the board.
 
-### Superseded — `results/subfury_v2/eval.json`
+### Superseded — `results/subfury/eval.json`
 
 The "recall@100 0.220 vs 0.097" headline this file carries was measured against
-the n0kovo wordlist alone, and was produced by `subfury_v2/evaluate.py`, whose
+the n0kovo wordlist alone, and was produced by `subfury/evaluate.py`, whose
 K/H split comes from one sequential `random.Random(seed)` applied in iteration
 order — it changes with `--max-apexes`, the min-label filter and file order, so
 numbers from different runs of it are not comparable. **Do not quote it.** The

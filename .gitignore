@@ -20,4 +20,4 @@ data/subdomains_*.txt
 # fetched/derived caches — reproducible, and large
 research/data/cache/
 results/research/cache/
-results/v3/smoke/
+results/runs/smoke/

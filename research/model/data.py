@@ -1,4 +1,4 @@
-"""SubFury v3 — dataset and batching for set-conditioned subdomain prediction.
+"""SubFury — dataset and batching for set-conditioned subdomain prediction.
 
 The corpus is apex-grouped JSONL, one organisation per line:
 
@@ -6,9 +6,9 @@ The corpus is apex-grouped JSONL, one organisation per line:
 
 Every training example is a random split of one organisation's labels into a
 known set K and a held-out set H.  The split point is drawn uniformly, so the
-model sees |K| = 1 as often as |K| = 39 — v2 only ever trained on <= 12 known
+model sees |K| = 1 as often as |K| = 39 — the beam-search model only ever trained on <= 12 known
 labels serialised into a context window, and refusing to do that is the whole
-point of v3.
+the point of the architecture.
 
 Two supervision signals come out of one split:
 
@@ -212,7 +212,7 @@ class OrgSetDataset(Dataset):
         self.vocab = vocab
         self.epoch = 0
 
-        self.bos = tokenizer.token_to_id("[DELIM]")   # no [BOS] in the v2 BPE
+        self.bos = tokenizer.token_to_id("[DELIM]")   # no [BOS] in the shared BPE
         self.eos = tokenizer.token_to_id("[END]")
         assert self.bos is not None and self.eos is not None
 
@@ -415,7 +415,7 @@ def _selftest(argv=None):
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--train-jsonl", default="data/groups_train.jsonl")
-    ap.add_argument("--tokenizer", default="results/subfury_v2/tokenizer.json")
+    ap.add_argument("--tokenizer", default="results/subfury/tokenizer.json")
     ap.add_argument("--limit", type=int, default=20000, help="apex slice")
     ap.add_argument("--vocab-size", type=int, default=20000)
     ap.add_argument("--batch-size", type=int, default=16)
@@ -427,7 +427,7 @@ def _selftest(argv=None):
     random.seed(args.seed)
 
     print("=" * 72)
-    print("SubFury v3 data self-test")
+    print("SubFury data self-test")
     print("=" * 72)
 
     tok = Tokenizer.from_file(args.tokenizer)

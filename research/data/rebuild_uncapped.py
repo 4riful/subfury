@@ -12,7 +12,7 @@ stays in lockstep with the original run and the test set is identical.
 """
 import argparse, glob, json, os, random, sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury_v2"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury"))
 from data_prep import MAX_LABELS, group_by_apex, parse_vertices     # noqa: E402
 
 

@@ -114,7 +114,7 @@ that is what makes it read as *data* rather than as a marketing graphic.
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │ NAV                                                              64px  │
-│ ◆ SubFury  v2          7.8M params · recall@100 0.220   [GitHub] [Console]│
+│ ◆ SubFury               7.8M params · recall@200 0.260   [GitHub] [Console]│
 ├────────────────────────────────────────────────────────────────────────┤ ← sticky
 │                                                                        │
 │ 01 HERO + LIVE DEMO                                    grid: 6 / 6     │

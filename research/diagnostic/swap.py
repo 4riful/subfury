@@ -18,7 +18,7 @@ and every variant is scored against A's held-out labels. If `own` does not beat
 import argparse, json, os, random, statistics, sys
 from collections import Counter
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury_v2"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury"))
 from predict import load_model, predict_labels                      # noqa: E402
 
 
@@ -26,7 +26,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test-jsonl", default="data/groups_test.jsonl")
     ap.add_argument("--train-jsonl", default="data/groups_train.jsonl")
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     ap.add_argument("--budgets", default="10,25,50,100")
     ap.add_argument("--num-beams", type=int, default=64)
     ap.add_argument("--max-apexes", type=int, default=120)

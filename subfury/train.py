@@ -1,4 +1,4 @@
-"""Train SubFury v2: set-conditioned subdomain prediction.
+"""Train the beam-search SubFury model: set-conditioned subdomain prediction.
 
 Each training example is built dynamically from an apex group:
 
@@ -102,7 +102,7 @@ def main():
     ap.add_argument("--train-jsonl", default="data/groups_train.jsonl")
     ap.add_argument("--val-jsonl", default="data/groups_val.jsonl")
     ap.add_argument("--tokenizer", default="results/tokenizer.json")
-    ap.add_argument("--out", default="results/subfury_v2")
+    ap.add_argument("--out", default="results/subfury")
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch-size", type=int, default=96)
     ap.add_argument("--lr", type=float, default=6e-4)

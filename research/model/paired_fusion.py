@@ -21,7 +21,7 @@ lines = [f"{'comparison':<44}" + "".join(f"{'@'+str(n):>26}" for n in DEFAULT_NS
          "-" * (44 + 26 * len(DEFAULT_NS))]
 
 for tag in ("deepsets-full", "settrans-full"):
-    ck = f"results/v3/{tag}/best.pt"
+    ck = f"results/runs/{tag}/best.pt"
     if not os.path.exists(ck):
         print("skip", tag); continue
     scored = {}
@@ -44,5 +44,5 @@ for tag in ("deepsets-full", "settrans-full"):
 lines += ["", "* = paired 95% CI excludes zero.  Negative means the hybrid is",
           "    WORSE than that single channel alone."]
 out["table"] = "\n".join(lines)
-json.dump(out, open("results/research/v3_fusion.json", "w"), indent=1, default=float)
+json.dump(out, open("results/research/fusion.json", "w"), indent=1, default=float)
 print("\n" + out["table"])

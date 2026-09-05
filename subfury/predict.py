@@ -1,4 +1,4 @@
-"""SubFury v2 inference: known subdomains in -> validated new subdomains out.
+"""SubFury beam-search inference: known subdomains in -> validated new subdomains out.
 
     python predict.py example.com --known known.txt -n 200
 
@@ -8,7 +8,7 @@ Pipeline:
   3. Filter: valid DNS labels, not already known
   4. Resolve concurrently via DNS (unless --no-resolve)
   5. Recursion: resolved hits are added to the known set and inference
-     re-runs, up to --max-recursion times (replaces v1's "RL loop")
+     re-runs, up to --max-recursion times
 
 Only run resolution against domains you are authorized to test.
 """
@@ -93,7 +93,7 @@ def resolve_all(labels, domain, workers=64):
 
 
 def run(domain, known, topn=100, resolve=True, max_recursion=3,
-        model_dir="results/subfury_v2", num_beams=64, quiet=False):
+        model_dir="results/subfury", num_beams=64, quiet=False):
     model, tok, device = load_model(model_dir)
     known = set(known)
     all_hits = {}
@@ -128,7 +128,7 @@ def main():
     ap.add_argument("--num-beams", type=int, default=64)
     ap.add_argument("--no-resolve", action="store_true")
     ap.add_argument("--max-recursion", type=int, default=3)
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     args = ap.parse_args()
 
     with open(args.known) as f:

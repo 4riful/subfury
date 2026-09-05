@@ -1,7 +1,7 @@
 {
  "train_jsonl": "data/groups_train_uncapped.jsonl",
  "val_jsonl": "data/groups_val_uncapped.jsonl",
- "tokenizer": "results/subfury_v2/tokenizer.json",
+ "tokenizer": "results/subfury/tokenizer.json",
  "encoder": "settrans",
  "d_model": 256,
  "n_head": 4,
@@ -25,5 +25,5 @@
  "workers": 2,
  "seed": 1337,
  "tag": "settrans-gen",
- "out_root": "results/v3"
+ "out_root": "results/runs"
 }

@@ -1,7 +1,7 @@
 {
  "train_jsonl": "data/groups_train_uncapped.jsonl",
  "val_jsonl": "data/groups_val_uncapped.jsonl",
- "tokenizer": "results/subfury_v2/tokenizer.json",
+ "tokenizer": "results/subfury/tokenizer.json",
  "encoder": "settrans",
  "d_model": 256,
  "n_head": 4,
@@ -16,7 +16,7 @@
  "n_neg": 32,
  "hard_frac": 0.75,
  "lambda_rank": 1.0,
- "use_prior": 0,
+ "use_prior": 1,
  "batch": 24,
  "steps": 3000,
  "warmup": 200,
@@ -24,6 +24,6 @@
  "eval_every": 500,
  "workers": 2,
  "seed": 1337,
- "tag": "settrans-noprior",
- "out_root": "results/v3"
+ "tag": "settrans-full",
+ "out_root": "results/runs"
 }

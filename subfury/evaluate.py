@@ -21,7 +21,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test-jsonl", default="data/groups_test.jsonl")
     ap.add_argument("--wordlist", default="data/subdomains_tiny.txt")
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     ap.add_argument("-n", "--topn", type=int, default=100)
     ap.add_argument("--num-beams", type=int, default=64)
     ap.add_argument("--max-apexes", type=int, default=150)
@@ -69,7 +69,7 @@ def main():
     m = sum(model_recalls) / len(model_recalls)
     b = sum(base_recalls) / len(base_recalls)
     print(f"\n=== recall@{args.topn} over {len(groups)} apexes ===")
-    print(f"SubFury v2 : {m:.3f}")
+    print(f"SubFury : {m:.3f}")
     print(f"n0kovo top-{args.topn}: {b:.3f}")
     print(f"relative improvement: {((m-b)/max(b,1e-9))*100:+.1f}%")
 

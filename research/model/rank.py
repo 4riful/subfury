@@ -1,4 +1,4 @@
-"""v3 as a Ranker, so it is scored by exactly the harness every baseline used.
+"""SubFury as a Ranker, so it is scored by exactly the harness every baseline used.
 
 Candidates come from two places and are merged by score:
 
@@ -21,16 +21,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from model import V3Config, SubFuryV3                                # noqa: E402
 
-# subfury_v2/predict.py also lives behind a module called `model`, so importing
-# it here would shadow v3's. This is the one thing needed from it.
+# subfury/predict.py also lives behind a module called `model`, so importing
+# it here would shadow this one's. This is the one thing needed from it.
 LABEL_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$")
 
 
 class V3Ranker:
-    name = "subfury-v3"
+    name = "subfury"
 
-    def __init__(self, ckpt="results/v3/settrans-rank1-prior1/best.pt",
-                 tokenizer="results/subfury_v2/tokenizer.json",
+    def __init__(self, ckpt="results/runs/settrans-rank1-prior1/best.pt",
+                 tokenizer="results/subfury/tokenizer.json",
                  source="hybrid", num_beams=64, device=None, mix=0.5):
         from tokenizers import Tokenizer
         self.dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,7 +41,7 @@ class V3Ranker:
         self.tok = Tokenizer.from_file(tokenizer)
         self.cand = blob["vocab"]
         self.source, self.num_beams, self.mix = source, num_beams, mix
-        self.name = f"subfury-v3-{self.cfg.encoder}-{source}"
+        self.name = f"subfury-{self.cfg.encoder}-{source}"
 
     def _memory(self, known):
         ids = []

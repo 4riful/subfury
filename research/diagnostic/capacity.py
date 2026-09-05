@@ -20,7 +20,7 @@ not the bottleneck and the set-encoder argument is weaker.
 """
 import argparse, json, os, random, statistics, sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury_v2"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "subfury"))
 from predict import load_model, predict_labels                      # noqa: E402
 
 
@@ -37,7 +37,7 @@ def windows(K, w, repeats, rng):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--test-jsonl", default="data/groups_test_uncapped.jsonl")
-    ap.add_argument("--model", default="results/subfury_v2")
+    ap.add_argument("--model", default="results/subfury")
     ap.add_argument("--budgets", default="10,25,50,100")
     ap.add_argument("--window", type=int, default=24)
     ap.add_argument("--repeats", type=int, default=3)
