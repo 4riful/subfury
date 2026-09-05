@@ -227,7 +227,7 @@ pricing, no hosted service. None exist.
 - The wordmark is `webui/static/subfury-mark.png` — green "Sub", white "Fury",
   skull between them. On dark surfaces the skull is lifted from its original
   `#44475a`, which was drawn for a light page; the original is kept at
-  `webui/static/subfury.png`.
+  `webui/static/subfury-mark.png`.
 - Voice: measured, technical, evidence-first. State the limitation before
   anyone asks. Never oversell — the limitation section is load-bearing, not a
   disclaimer.

@@ -1,6 +1,17 @@
-# SubFury v2 — install torch separately with the right CUDA index, e.g.:
+# SubFury — install torch separately with the right CUDA index, e.g.:
 #   pip install torch --index-url https://download.pytorch.org/whl/cu126
-torch
-tokenizers
-tldextract
-dnspython
+# then: pip install -r requirements.txt
+
+# model + training
+torch>=2.4
+tokenizers>=0.20
+numpy>=1.26
+
+# inference and the shared evaluation harness
+tldextract>=5.1
+dnspython>=2.0          # DNS validation only; never used by the benchmarks
+
+# web UI (webui/app.py)
+fastapi>=0.115
+uvicorn>=0.30
+pydantic>=2.7

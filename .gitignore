@@ -7,9 +7,11 @@ data/groups_*.jsonl
 results/**/*.pt
 results/train.log
 
-# keep tokenizers and code
-!results/tokenizer.json
-!results/subfury_v2/tokenizer.json
+# the tokenizer that ships with the model. results/tokenizer.json is the
+# byte-identical source copy tokenizer_train.py writes and train.py copies in,
+# so only the shipped one is tracked.
+!results/subfury/tokenizer.json
+results/tokenizer.json
 
 # webui runtime
 webui/__pycache__/

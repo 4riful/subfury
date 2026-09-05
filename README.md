@@ -390,4 +390,4 @@ results/     tokenizer, checkpoints, and the research artifacts every number her
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
