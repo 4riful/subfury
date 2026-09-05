@@ -1,0 +1,28 @@
+{
+  "metric": "recall@N vs the n0kovo wordlist at an equal candidate budget, on held-out apexes; no DNS",
+  "apexes": 545,
+  "wordlist": "subdomains_tiny.txt",
+  "min_labels": 6,
+  "points": [
+    {
+      "n": 25,
+      "model": 0.175,
+      "baseline": 0.028
+    },
+    {
+      "n": 50,
+      "model": 0.21,
+      "baseline": 0.06
+    },
+    {
+      "n": 100,
+      "model": 0.22,
+      "baseline": 0.097
+    },
+    {
+      "n": 200,
+      "model": 0.221,
+      "baseline": 0.142
+    }
+  ]
+}

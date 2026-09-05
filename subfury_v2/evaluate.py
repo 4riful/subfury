@@ -11,6 +11,7 @@ No DNS queries — ground truth is the held-out real hostnames.
 
 import argparse
 import json
+import os
 import random
 
 from predict import load_model, predict_labels
@@ -26,6 +27,8 @@ def main():
     ap.add_argument("--max-apexes", type=int, default=150)
     ap.add_argument("--min-labels", type=int, default=6)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--out", help="append this run's result to a JSON file "
+                                  "(the web UI reads it instead of hardcoded numbers)")
     args = ap.parse_args()
 
     rng = random.Random(args.seed)
@@ -69,6 +72,25 @@ def main():
     print(f"SubFury v2 : {m:.3f}")
     print(f"n0kovo top-{args.topn}: {b:.3f}")
     print(f"relative improvement: {((m-b)/max(b,1e-9))*100:+.1f}%")
+
+    if args.out:
+        try:
+            with open(args.out) as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            doc = {}
+        doc["metric"] = ("recall@N vs the n0kovo wordlist at an equal candidate "
+                         "budget, on held-out apexes; no DNS")
+        doc["apexes"] = len(groups)
+        doc["wordlist"] = os.path.basename(args.wordlist)
+        doc["min_labels"] = args.min_labels
+        points = {p["n"]: p for p in doc.get("points", [])}
+        points[args.topn] = {"n": args.topn, "model": round(m, 3),
+                             "baseline": round(b, 3)}
+        doc["points"] = [points[k] for k in sorted(points)]
+        with open(args.out, "w") as f:
+            json.dump(doc, f, indent=2)
+        print(f"wrote {args.out}")
 
 
 if __name__ == "__main__":

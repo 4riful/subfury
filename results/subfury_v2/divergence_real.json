@@ -1,0 +1,31 @@
+{
+  "apexes": [
+    "saks.com",
+    "hanke100.com",
+    "leafphp.dev",
+    "wiu.edu",
+    "rohde-schwarz.com",
+    "hzahav.com"
+  ],
+  "seed_sizes": {
+    "saks.com": 7,
+    "hanke100.com": 20,
+    "leafphp.dev": 11,
+    "wiu.edu": 20,
+    "rohde-schwarz.com": 20,
+    "hzahav.com": 8
+  },
+  "pairwise_jaccard_min": 0.01,
+  "pairwise_jaccard_max": 0.786,
+  "pairwise_jaccard_mean": 0.2,
+  "seed_driven_share": {
+    "saks.com": 0.7,
+    "hanke100.com": 0.94,
+    "leafphp.dev": 0.16,
+    "wiu.edu": 0.3,
+    "rohde-schwarz.com": 0.2,
+    "hzahav.com": 0.84
+  },
+  "topn": 50,
+  "beams": 128
+}

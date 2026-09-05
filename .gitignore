@@ -16,3 +16,8 @@ webui/__pycache__/
 
 # third-party wordlists (fetched, see README)
 data/subdomains_*.txt
+
+# fetched/derived caches — reproducible, and large
+research/data/cache/
+results/research/cache/
+results/v3/smoke/

@@ -8,7 +8,8 @@
 
   <p>
     <img alt="model" src="https://img.shields.io/badge/model-7.8M_params-22c55e">
-    <img alt="recall" src="https://img.shields.io/badge/recall%40100-0.224_vs_0.086_baseline-5ea9ff">
+    <img alt="recall at N=10" src="https://img.shields.io/badge/recall%4010-0.114_vs_0.052_freq._prior-5ea9ff">
+    <img alt="recall at N=200" src="https://img.shields.io/badge/recall%40200-v2_0.217_·_v3_0.260-f59e0b">
     <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
   </p>
 </div>
@@ -19,10 +20,12 @@ SubFury generates candidate subdomains **conditioned on the subdomains you have
 already discovered**, ranks them by probability with beam search, validates them
 over live DNS, then feeds confirmed hits back as context and runs again.
 
-Organizations name infrastructure consistently. A host called `inventory` makes
-`inventoryapp` likely; `grafana` makes `prometheus` likely. That per-organization
-signal is what a static wordlist structurally cannot capture — and it is the
-entire basis of this tool.
+Organizations name infrastructure consistently, and a static wordlist — the same
+list fired at every target — cannot use that. Whether this model actually uses it
+is measured rather than asserted: conditioning it on a *different* organization's
+labels collapses recall@100 from 0.288 to 0.059 on the same targets
+(`results/research/swap.json`, 100 apexes). How far that conditioning goes, and
+where the model stops beating a plain frequency prior, are both below.
 
 > [!WARNING]
 > DNS validation sends live queries. Only run it against domains you are
@@ -32,22 +35,155 @@ entire basis of this tool.
 
 ## Results
 
-Held-out evaluation on **885 real apex domains** the model never saw. For each,
-half its hostnames are shown to the model and the other half withheld as ground
-truth. Both methods get the same candidate budget; no DNS is involved.
+Every number below comes from an artifact under `results/research/`, produced by
+`research/harness.py`: one shared split, one protocol, every method scored on
+exactly the same cases.
 
-| Budget | SubFury v2 | n0kovo wordlist | Improvement |
-|-------:|-----------:|----------------:|------------:|
-| N=25   | **0.174**  | 0.030           | **+482%**   |
-| N=50   | **0.210**  | 0.058           | **+264%**   |
-| N=100  | **0.224**  | 0.086           | **+160%**   |
-| N=200  | **0.223**  | 0.122           | **+83%**    |
+**Protocol.** `data/groups_test.jsonl` holds 885 held-out apexes the model never
+saw; the **545** with at least 6 labels are used, so a known/target split is
+meaningful — **4,839 held-out labels**, mean 8.5 known and 8.9 withheld per apex.
+Each apex's labels are split ~50/50 into a known set shown to the ranker and a
+withheld set used as ground truth, by an RNG seeded from `sha256("1337:<apex>")`,
+so the split does not depend on apex ordering, on filtering, or on which methods
+are being run. Every method gets the same candidate budget N. No DNS, no network.
 
-The margin is widest at **small N** — exactly the regime that matters when your
-DNS query budget is the constraint. Reproduce with `python subfury_v2/evaluate.py -n 100`.
+### recall@N — every method, one split
 
-**Live example.** Seeded with only `www` and `blog` on a real domain, round 1
-found `shop`; that hit became context and round 2 found `learn`.
+`results/research/baselines.json`. Mean per-apex recall; brackets are
+percentile-bootstrap 95% CIs over apexes, 2,000 resamples.
+
+```
+method                              recall@10             recall@25             recall@50            recall@100            recall@200      MAP  apex hit@max
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+wordlist:subdomains_tiny.txt  0.018 [0.013,0.024]   0.027 [0.021,0.034]   0.058 [0.048,0.069]   0.097 [0.084,0.112]   0.138 [0.124,0.154]   0.0083      284/545
+frequency-prior               0.052 [0.042,0.062]   0.100 [0.084,0.118]   0.134 [0.116,0.153]   0.179 [0.158,0.202]   0.236 [0.212,0.262]   0.0361      306/545
+markov-3gram                  0.029 [0.023,0.035]   0.047 [0.038,0.057]   0.073 [0.060,0.087]   0.117 [0.100,0.137]   0.145 [0.125,0.169]   0.0202      200/545
+markov-4gram                  0.059 [0.048,0.070]   0.090 [0.075,0.107]   0.122 [0.104,0.143]   0.154 [0.134,0.176]   0.194 [0.171,0.220]   0.0356      256/545
+markov-5gram                  0.057 [0.046,0.068]   0.098 [0.082,0.116]   0.132 [0.113,0.152]   0.175 [0.154,0.199]   0.224 [0.200,0.250]   0.0369      296/545
+subfury-v2 (neural)           0.114 [0.095,0.134]   0.172 [0.148,0.196]   0.207 [0.182,0.235]   0.216 [0.190,0.244]   0.217 [0.192,0.244]   0.0968      264/545
+```
+
+`frequency-prior` is the baseline that matters: the training-split label
+frequency ranking, same data as the model, zero parameters. The n0kovo wordlist
+is the weakest control on the board — earlier versions of this README headlined
+`recall@100 0.220 vs 0.097` against it, which flattered the model. Against that
+wordlist, every method here looks good.
+
+### The result is budget-dependent — and that is the finding
+
+Paired bootstrap of each method minus the frequency prior on the same apexes,
+2,000 resamples (`paired_vs_frequency_prior` in the same artifact):
+
+```
+method                             delta@10                  delta@25                  delta@50                 delta@100                 delta@200
+wordlist:subdomains_tiny.txt  -0.034 [-0.044,-0.023]*   -0.073 [-0.090,-0.057]*   -0.076 [-0.095,-0.059]*   -0.081 [-0.101,-0.064]*   -0.098 [-0.119,-0.079]*
+markov-5gram                  +0.005 [+0.001,+0.009]*   -0.002 [-0.006,+0.001]    -0.002 [-0.007,+0.002]    -0.003 [-0.010,+0.003]    -0.012 [-0.019,-0.005]*
+subfury-v2 (neural)           +0.062 [+0.048,+0.077]*   +0.071 [+0.055,+0.089]*   +0.073 [+0.056,+0.090]*   +0.037 [+0.023,+0.053]*   -0.019 [-0.030,-0.007]*
+* = 95% CI of the paired difference excludes zero
+```
+
+- **At a tight budget the model wins clearly.** N=10: 0.114 vs 0.052, a 2.2x
+  margin with cleanly separated intervals; paired delta +0.062, p ≈ 0.
+- **The margin narrows as the budget opens.** N=100: 0.216 [0.190,0.244] vs
+  0.179 [0.158,0.202] — the marginal CIs overlap, and only the paired test
+  separates them (+0.037 [+0.023,+0.053]).
+- **At N=200 the prior wins.** 0.217 vs 0.236; paired delta **−0.019**
+  [−0.030,−0.007], p = 0.002. Model recall is flat past N≈50 (0.207 → 0.216 →
+  0.217) because beam search runs out of distinct plausible labels, while the
+  prior keeps scoring hits by enumerating more of the global head.
+
+So the honest claim is a regime, not a single number: **v2 is worth running when
+the DNS budget is the binding constraint, and is not worth running when you can
+afford to fire a few hundred globally common labels at the target.**
+
+That ceiling is a property of beam search, not of the idea — which is what v3
+below is for.
+
+### v3: a retrieval head removes the ceiling
+
+`results/research/v3_ablation.json`. Same harness, same 545 apexes, same
+budgets. v3 keeps the set-conditioned encoder but adds a **retrieval head** that
+scores the entire label vocabulary directly, instead of asking beam search to
+enumerate it. Four runs, ablating the set encoder, the retrieval head, and the
+prior subtraction.
+
+```
+method                                   recall@10             recall@25             recall@50            recall@100            recall@200       MAP  apex hit@max
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+settrans-full/generator          0.046 [0.033,0.059]     0.073 [0.058,0.090]     0.100 [0.082,0.119]     0.100 [0.083,0.120]     0.100 [0.083,0.120]    0.0340       137/545
+settrans-full/retriever          0.086 [0.072,0.101]     0.136 [0.117,0.156]     0.177 [0.156,0.201]     0.219 [0.196,0.244]     0.252 [0.228,0.278]    0.0638       320/545
+deepsets-full/hybrid             0.096 [0.080,0.112]     0.141 [0.121,0.162]     0.184 [0.162,0.208]     0.227 [0.202,0.254]     0.258 [0.233,0.286]    0.0656       317/545
+deepsets-full/retriever          0.100 [0.084,0.116]     0.145 [0.125,0.166]     0.184 [0.164,0.208]     0.232 [0.207,0.259]     0.260 [0.235,0.286]    0.0759       322/545
+settrans-gen/generator           0.026 [0.019,0.034]     0.075 [0.061,0.091]     0.103 [0.086,0.122]     0.107 [0.089,0.127]     0.107 [0.089,0.126]    0.0171       162/545
+settrans-noprior/retriever       0.082 [0.066,0.098]     0.117 [0.096,0.138]     0.134 [0.114,0.156]     0.155 [0.133,0.179]     0.180 [0.157,0.207]    0.0631       211/545
+```
+
+Paired against v2 — same apexes, so between-apex variance cancels
+(`results/research/v3_vs_v2_paired.json`):
+
+```
+v3 variant vs subfury-v2                                 @10                       @25                       @50                      @100                      @200
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+deepsets-full/retriever              -0.015 [-0.024,-0.006]*   -0.026 [-0.037,-0.016]*   -0.023 [-0.033,-0.013]*   +0.016 [+0.005,+0.028]*   +0.043 [+0.031,+0.055]*
+deepsets-full/hybrid                 -0.019 [-0.028,-0.010]*   -0.031 [-0.041,-0.021]*   -0.023 [-0.033,-0.014]*   +0.011 [-0.000,+0.021]    +0.041 [+0.030,+0.053]*
+settrans-full/retriever              -0.028 [-0.039,-0.018]*   -0.036 [-0.048,-0.023]*   -0.030 [-0.043,-0.017]*   +0.003 [-0.010,+0.016]    +0.035 [+0.022,+0.048]*
+settrans-noprior/retriever           -0.032 [-0.042,-0.024]*   -0.055 [-0.068,-0.043]*   -0.073 [-0.087,-0.060]*   -0.061 [-0.075,-0.048]*   -0.037 [-0.050,-0.024]*
+
+* = paired 95% CI excludes zero.  Positive favours v3.
+```
+
+Read it in four parts.
+
+- **The retrieval head is the entire win, and it is cheaper.** Scoring the
+  vocabulary beats beam search at every budget and takes **7.4s against 89.1s**
+  for the same 545 apexes (`seconds`, same artifact — every retriever run lands
+  at 7–10s, every run that decodes lands at 78–89s). The generator head alone saturates near 0.12 — flat from
+  N=50 to N=200 — for exactly the reason v2 does: beams run out of distinct
+  plausible labels. Ranking a fixed vocabulary has no such ceiling.
+- **Subtracting the prior helps recall and hurts the loss.** `settrans-noprior`
+  had the *best* validation ranking loss of the four (3.010 against 3.877) and
+  is the *worst* ranker at every budget, losing to v2 everywhere. Predicting
+  popularity minimises the loss without conditioning on anything. Had the
+  ablation not been run, the better loss would have looked like the better model.
+- **The retrieval head also improves the generator that shares its encoder.**
+  Trained alone, the generator reaches 0.026 at N=10 (`settrans-gen`); trained
+  beside a retrieval head, the same generator reaches 0.046.
+- **Deep Sets beats the Set Transformer** at every budget. The extra attention
+  machinery buys nothing on sets this size.
+
+What v3 does **not** do is win the tight-budget regime: it is significantly
+worse than v2 at N=10, 25 and 50. What it removes is the saturation — v2 is flat
+at 0.216 → 0.217 from N=100 to N=200 while `deepsets-full` climbs to 0.260, and
+apexes with at least one correct label rise from **264/545 to 322/545**.
+
+> [!NOTE]
+> These runs train on the same Common Crawl corpus, so they inherit the corpus
+> mismatch documented below. v3 is an architecture result, not a corpus fix.
+> The shipped web UI still serves v2.
+
+### The closed-vocabulary ceiling
+
+Averaged over apexes, only **57.6%** of an apex's held-out labels appear anywhere
+in the training vocabulary (55.3% pooled over all 4,839), and **75 of the 545
+apexes have none at all** — unwinnable for any closed-vocabulary method. The
+`reachable_subset` / `reachable_table` fields of `baselines.json` rescore the 470
+apexes with at least one reachable label: 0.251 vs 0.207 at N=100, 0.252 vs 0.274
+at N=200. The ordering, and the crossover, are unchanged.
+
+### Reproduce
+
+```bash
+python3 research/run_baselines.py --neural    # → results/research/baselines.json
+```
+
+`subfury_v2/evaluate.py` produced the older wordlist-only numbers still sitting
+in `results/subfury_v2/eval.json`. Its K/H split comes from a single sequential
+`random.Random(seed)` that shuffles the apex list and then each apex's labels in
+iteration order, so the split changes with `--max-apexes`, with the min-label
+filter, and with file order — historical numbers from it are **not comparable
+across runs**. `research/harness.py` replaces it with the per-apex `sha256`
+seeding described above, and is what every figure on this page — and the web
+UI's model page — uses. `eval.json` is retained only as a historical artifact.
 
 ---
 
@@ -128,24 +264,40 @@ confirmed hits rejoin the known set for the next round with strictly better cont
 
 ### Is it really conditioning, or replaying a global list?
 
-Measured, because the whole design rests on it. Jaccard overlap between top-50
-prediction sets from different seed types:
+Measured two ways, because the whole design rests on it.
 
-|          | dev  | infra | ecom | monitor |
-|----------|-----:|------:|-----:|--------:|
-| **dev**     | 1.00 | 0.35 | 0.59 | **0.18** |
-| **monitor** | 0.18 | 0.43 | 0.20 | 1.00 |
+**Swap test** — `results/research/swap.json`, 100 held-out apexes. The same model
+is conditioned on its own apex's known labels, on a *different* organization's
+labels, on the globally most common labels, and on a single one of its own, then
+scored against the same withheld set each time.
 
-A dev seed and a monitoring seed share only **18%** of their predictions.
-Against a generic prior, **28–66% of predictions are seed-driven** — the remainder
-being names that genuinely are common everywhere.
+| Conditioned on | @10 | @25 | @50 | @100 |
+|---|---:|---:|---:|---:|
+| its own known set | **0.173** | **0.243** | **0.279** | **0.288** |
+| a different org's labels | 0.017 | 0.035 | 0.054 | 0.059 |
+| the globally most common labels | 0.020 | 0.035 | 0.050 | 0.050 |
+| one label from its own set | 0.145 | 0.213 | 0.253 | 0.259 |
+
+Conditioning is real: own beats swapped by **0.230 [0.166, 0.298]** at N=100, and
+own is better on 49 of the 100 apexes against swapped better on 4. Feed it
+another organization's names and it performs no better than a generic prompt.
+
+It is also **shallow**. A *single* known label already reaches 0.259 of the 0.288
+the full set reaches — the remaining known labels are worth 0.029. And which
+labels the model sees barely matters: `results/research/capacity.json` feeds it
+different 24-label windows of the same known set (alphabetical tail, head, evenly
+spread, three random draws) on the 30 held-out apexes with more than 24 known
+labels; recall@100 lands between 0.125 and 0.129 across all six, with a median
+per-apex spread of **0.000**. The 24-label truncation window is not the
+bottleneck — the model is not extracting much from the known set beyond a single
+member of it.
 
 ---
 
 ## Training your own model
 
 ```bash
-# 0. fetch the baseline wordlist (used by evaluate.py) into data/
+# 0. fetch the wordlist control (one of the baselines) into data/
 curl -Lo data/subdomains_tiny.txt \
   https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_tiny.txt
 
@@ -159,8 +311,8 @@ python subfury_v2/tokenizer_train.py
 # 3. train  (~3 min for 4 epochs on an RTX 4060)
 python subfury_v2/train.py --epochs 4
 
-# 4. measure against the wordlist baseline
-python subfury_v2/evaluate.py -n 100
+# 4. score it against every baseline on one shared, order-independent split
+python3 research/run_baselines.py --neural
 ```
 
 The shipped model was trained on **84,144 apex groups / ~1.04M hostnames**.
@@ -183,29 +335,59 @@ Every choice — from-scratch over fine-tuning, decoder-only over encoder-decode
 domain BPE over character-level, and the parameter count — is justified against
 current literature and tooling in **[MODEL_SELECTION.md](MODEL_SELECTION.md)**.
 
-### Known limitation
+### Known limitation: the corpus does not match the use case
 
-Training data is the Common Crawl **web** graph: crawlable public sites. Internal
-infrastructure hostnames are underrepresented by construction, so infra-flavored
-seeds drift toward generic web labels. Training on passive DNS or Certificate
-Transparency logs would fix this and is the highest-value next step.
+Training *and* evaluation data are both the Common Crawl **host webgraph** —
+crawlable public sites. That does more than underrepresent internal
+infrastructure: it means the benchmark rewards exactly the labels a recon
+operator does not care about.
+
+- **18.3%** of the 4,839 held-out labels are one or two characters (884 of
+  4,839), and the most frequent held-out labels are `m`, `blog`, `de`, `my`,
+  `nl`, `es`, `no`, `pt`, `fr`, `ru`, `it` — language and mobile variants of a
+  public website. (Derived from `data/groups_test.jsonl` under the
+  `research/harness.py` split.)
+- Certificate Transparency logs tell a different story on the same kind of
+  target. `research/data/ct_observations.jsonl` covers 40 apexes, 27 of them from
+  this very test split: **1.3%** one-or-two-character labels, and the labels
+  shared across the most organizations are `www`, `test`, `api`, `mail`,
+  `support`, `demo`, `status`, `cdn`, `docs`, `dev`, `webmail`, `staging`.
+- The scoring actively pays for the mismatch. `results/research/lengthbias.json`
+  (80 apexes; absolute level differs from the table above because it is a
+  different subset) shows that refusing to emit labels shorter than 3 characters
+  drops recall@100 from **0.265 to 0.117**, a 56% loss, while a beam length
+  penalty that cuts the short-label share of the top-50 from 48.6% to 23.7%
+  costs almost nothing (0.265 → 0.259). A large part of the headline recall is
+  short-label mass.
+
+This is why the tool can score 0.22 on this benchmark and still find very little
+against a live engagement target: it is graded on a different name distribution
+than the one it is used against. Retraining on Certificate Transparency or
+passive DNS — *and re-benchmarking on the same* — is the highest-value next step.
+Until that is done, the numbers above measure Common-Crawl mimicry, not recon
+value.
 
 ---
 
-## What changed from v1
+## What the first attempt got wrong
 
-v1 fine-tuned DistilGPT-2 on a flat wordlist and sampled blindly.
+The original notebook fine-tuned DistilGPT-2 on a flat wordlist and sampled
+blindly. It is preserved under `legacy/v1_distilgpt2/` as reference only —
+none of it is reachable from the current pipeline, and the reasons it was
+abandoned are worth more than the code is:
 
-| v1 | v2 |
+| the first attempt | now |
 |---|---|
 | Blind generation from a global wordlist | Set-conditioned on the target's known subdomains |
 | DistilGPT-2, 82M, English BPE | Purpose-built 7.8M decoder + subdomain BPE |
 | Temperature sampling | Deterministic beam search |
 | "RL" = retrain on resolved hits | Recursive inference over a growing known set |
-| No evaluation | recall@N on held-out real hostnames vs a baseline |
+| No evaluation | recall@N against five baselines on one shared split, with bootstrap CIs |
 | Hardcoded W&B API key | Credentials read from the environment |
 
-The original notebook and its scripts are preserved under `legacy/`.
+The last two rows are the ones that mattered. Without a shared-split benchmark
+there was no way to know the model was being flattered by its baseline — which
+is exactly what happened next, and what the numbers above now correct.
 
 ---
 
@@ -213,10 +395,11 @@ The original notebook and its scripts are preserved under `legacy/`.
 
 ```
 subfury_v2/     data_prep · tokenizer_train · model · train · predict · evaluate · explain
-webui/          FastAPI backend + streaming single-page UI
+research/       harness · baselines · diagnostics · v3 (scored, see v3_ablation.json)
 legacy/         v1 DistilGPT-2 scripts, kept for reference
+webui/          FastAPI backend + streaming single-page UI
 data/           wordlists, Common Crawl parts, generated apex groups
-results/        tokenizer + checkpoints
+results/        tokenizer, checkpoints, and the research artifacts every number here cites
 ```
 
 ## License
