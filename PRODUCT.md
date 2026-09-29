@@ -17,8 +17,8 @@ web
 
 A subdomain prediction engine. A 7.79M-parameter transformer, trained from
 scratch on subdomain data, predicts an organization's unknown subdomains from
-the ones already discovered, ranks them by probability, validates them over DNS,
-and feeds confirmed hits back as context.
+the ones already discovered, ranks them by probability, collects budgeted DNS
+evidence, and feeds non-wildcard resolutions back as context.
 
 ## The one idea
 
@@ -71,12 +71,13 @@ N=200. No CT-log scraper or brute-forcer makes a per-target prediction.
 
 ## Capabilities and Constraints
 
-**Pipeline.** Known set → tokenize & condition → beam search → DNS resolve →
-recurse (hits rejoin the known set) → export. Streamed to the browser over SSE.
+**Pipeline.** Known set → tokenize & condition → beam search → budgeted A/AAAA/
+CNAME evidence with parent-zone wildcard controls → recurse (only non-wildcard
+resolutions rejoin the known set) → export. Streamed to the browser over SSE.
 
 **Search budget: Auto or Manual.** Auto sizes candidates, beam width and rounds
 from the known set — its size and how many distinct name families it spans —
-and states its reasoning in the UI. Manual unlocks the three fields and still
+and states its reasoning in the UI. Manual unlocks all four fields and still
 reports what Auto would have chosen. DNS off forces a single round.
 
 **Passive seeding.** crt.sh, certspotter, hackertarget and the Wayback CDX index
@@ -86,7 +87,8 @@ status is always reported — individual sources fail often (crt.sh 502s and
 stalls routinely). Passive sources send **nothing to the target**.
 
 **Authorization is mandatory.** DNS validation is the only thing that emits
-traffic toward the target, and every surface that can emit it must say so.
+traffic toward the target. The CLI requires `--authorized`; the web UI requires
+an acknowledgement before a live run.
 
 **Results belong to the user.** Export is one click; run history stays in the
 browser's localStorage and is never transmitted.

@@ -11,6 +11,7 @@ Only run resolution against domains you are authorized to test.
 import asyncio
 import datetime
 import json
+import math
 import os
 import sys
 import time
@@ -23,6 +24,7 @@ from pydantic import BaseModel
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "subfury"))
 
 from predict import LABEL_RE, load_model, predict_labels, resolve_all  # noqa: E402
+from dns_validation import QueryBudget, normalize_domain, preferred_answer  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.environ.get("SUBFURY_MODEL",
@@ -49,6 +51,10 @@ class PredictRequest(BaseModel):
     num_beams: int = 64
     resolve: bool = True
     max_recursion: int = 3
+    query_budget: int = 1000
+    max_qps: float = 50.0
+    wildcard_probes: int = 2
+    authorized: bool = False
 
 
 def sse(event: str, data: dict) -> str:
@@ -770,6 +776,20 @@ async def run_pipeline(req: PredictRequest):
                                t_ms=round((time.monotonic() - t0) * 1000, 1)))
 
     try:
+        domain = normalize_domain(req.domain)
+        if req.resolve and not req.authorized:
+            yield out("error", {"msg": "DNS resolution requires authorization acknowledgement"})
+            return
+        if req.resolve:
+            if req.query_budget < 1 or req.query_budget > 100000:
+                yield out("error", {"msg": "query_budget must be between 1 and 100000"})
+                return
+            if not math.isfinite(req.max_qps) or not 0.1 <= req.max_qps <= 1000:
+                yield out("error", {"msg": "max_qps must be finite and between 0.1 and 1000"})
+                return
+            if not 1 <= req.wildcard_probes <= 10:
+                yield out("error", {"msg": "wildcard_probes must be between 1 and 10"})
+                return
         yield out("log", {"msg": "loading model…"})
         model, tok, device = await loop.run_in_executor(None, get_model)
         yield out("log", {"msg": f"model ready ({model.num_params()/1e6:.1f}M params, {device})"})
@@ -777,8 +797,8 @@ async def run_pipeline(req: PredictRequest):
         known = set()
         for k in req.known:
             k = k.strip().lower()
-            if k.endswith("." + req.domain):
-                k = k[: -len(req.domain) - 1]
+            if k.endswith("." + domain):
+                k = k[: -len(domain) - 1]
             if k and LABEL_RE.match(k):
                 known.add(k)
         if not known:
@@ -788,7 +808,7 @@ async def run_pipeline(req: PredictRequest):
         # the run's own header: what is executing, on what, with which settings
         cfg = model.cfg
         yield out("meta", {
-            "domain": req.domain,
+            "domain": domain,
             "started": datetime.datetime.now(datetime.timezone.utc)
                        .isoformat(timespec="seconds"),
             "model": {
@@ -803,8 +823,11 @@ async def run_pipeline(req: PredictRequest):
                 "train_step": _state.get("train_step"),
             },
             "config": {"topn": req.topn, "num_beams": req.num_beams,
-                       "resolve": req.resolve, "max_recursion": req.max_recursion,
-                       "rounds_planned": req.max_recursion if req.resolve else 1},
+                        "resolve": req.resolve, "max_recursion": req.max_recursion,
+                        "query_budget": req.query_budget, "max_qps": req.max_qps,
+                        "wildcard_probes": req.wildcard_probes,
+                        "authorized": req.authorized,
+                        "rounds_planned": req.max_recursion if req.resolve else 1},
             "known": {"submitted": len(req.known), "accepted": len(known),
                       "labels": sorted(known)[:KNOWN_IN_TRACE],
                       "dropped_from_trace": max(0, len(known) - KNOWN_IN_TRACE)},
@@ -814,6 +837,9 @@ async def run_pipeline(req: PredictRequest):
         yield out("log", {"msg": f"conditioning on {len(known)} known labels"})
 
         total_hits = {}
+        wildcard_cache = {}
+        answer_cache = {}
+        budget = QueryBudget(req.query_budget, max_qps=req.max_qps) if req.resolve else None
         rounds = req.max_recursion if req.resolve else 1
         for rnd in range(1, rounds + 1):
             yield out("round", {"round": rnd, "known": len(known)})
@@ -840,27 +866,52 @@ async def run_pipeline(req: PredictRequest):
 
             yield out("log", {"msg": f"resolving {len(labels)} candidates…"})
             t_dns = time.monotonic()
-            hits = await loop.run_in_executor(None, lambda: resolve_all(labels, req.domain))
+            report = await loop.run_in_executor(
+                None,
+                lambda: resolve_all(labels, domain, budget=budget, detailed=True,
+                                    wildcard_probes=req.wildcard_probes,
+                                    wildcard_cache=wildcard_cache,
+                                    answer_cache=answer_cache),
+            )
             dns_ms = round((time.monotonic() - t_dns) * 1000, 1)
+            hits = {label: preferred_answer(item)
+                    for label, item in report["results"].items()
+                    if item["status"] == "resolved" and preferred_answer(item)[1]}
             new = {k: v for k, v in hits.items() if k not in total_hits}
-            for label, ip in sorted(new.items()):
-                yield out("hit", {"fqdn": f"{label}.{req.domain}", "ip": ip,
+            for label, (answer_type, answer) in sorted(new.items()):
+                item = report["results"][label]
+                yield out("hit", {"fqdn": f"{label}.{domain}",
+                                  "answer": answer, "answer_type": answer_type,
+                                  "answers": item["answers"], "status": item["status"],
                                   "round": rnd}, MOD_RESOLVE)
+            wildcard_count = report["counts"].get("probable_wildcard", 0)
+            if wildcard_count:
+                yield out("log", {"msg": f"excluded {wildcard_count} probable wildcard responses"},
+                          MOD_RESOLVE)
             yield out("round_done", {
                 "round": rnd, "new": len(new), "tested": len(labels),
                 "rate": round(len(hits) / max(len(labels), 1), 4),
+                "queries_used": report["queries_used"],
+                "queries_remaining": report["queries_remaining"],
+                "outcomes": report["counts"],
                 "elapsed_ms": dns_ms,
             }, MOD_RESOLVE)
             total_hits.update(new)
-            if not new:
-                yield out("log", {"msg": "no new resolutions — stopping recursion"})
+            if not new or budget.remaining == 0:
+                reason = ("DNS query budget exhausted" if budget.remaining == 0
+                          else "no new non-wildcard resolutions")
+                yield out("log", {"msg": reason + " — stopping recursion"})
                 break
             known |= set(new)
 
         yield out("done", {
-            "hits": [{"fqdn": f"{k}.{req.domain}", "ip": v} for k, v in sorted(total_hits.items())],
+            "hits": [{"fqdn": f"{k}.{domain}",
+                      "answer_type": value[0], "answer": value[1]}
+                     for k, value in sorted(total_hits.items())],
             "total": len(total_hits),
             "rounds": rnd,
+            "queries_used": budget.used if budget else 0,
+            "query_budget": budget.limit if budget else 0,
         })
     except Exception as exc:  # surface failures to the UI instead of hanging
         yield out("error", {"msg": f"{type(exc).__name__}: {exc}"})

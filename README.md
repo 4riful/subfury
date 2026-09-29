@@ -18,7 +18,13 @@
 
 SubFury generates candidate subdomains **conditioned on the subdomains you have
 already discovered**, ranks them by probability with beam search, validates them
-over live DNS, then feeds confirmed hits back as context and runs again.
+over live DNS, then feeds resolving names back as context and runs again.
+
+**Current scope:** the CLI and web UI run the beam-search predictor. The
+retrieval experiments below are offline research artifacts, not the live
+ranker. The operator workflow proposed below is a design for future work;
+budgeted wildcard-aware DNS evidence is implemented, while source-aware
+scheduling and service classification are not.
 
 Organizations name infrastructure consistently, and a static wordlist — the same
 list fired at every target — cannot use that. Whether this model actually uses it
@@ -217,8 +223,9 @@ activity log records every stage.
 pip install -r requirements.txt
 pip install torch --index-url https://download.pytorch.org/whl/cu126   # or cpu
 
-# predict + validate against an authorized target
-python subfury/predict.py example.com --known known.txt -n 200
+# predict + resolve against an authorized target, retaining DNS evidence
+python subfury/predict.py example.com --known known.txt -n 200 \
+  --authorized --query-budget 1000 --evidence-out run.json
 
 # model output only, no DNS traffic
 python subfury/predict.py example.com --known known.txt -n 200 --no-resolve
@@ -235,6 +242,164 @@ python subfury/explain.py --known api,dev,staging
 | `--num-beams` | 64 | beam width — higher is slower, more thorough |
 | `--max-recursion` | 3 | rounds of feeding resolved hits back as context |
 | `--no-resolve` | off | skip DNS entirely; print raw model output |
+| `--query-budget` | 1000 | hard cap across records, wildcard controls, and rounds |
+| `--max-qps` | 50 | maximum DNS query start rate |
+| `--authorized` | off | required acknowledgement before live DNS |
+| `--evidence-out` | unset | optional JSON DNS and wildcard evidence ledger |
+
+### Engineering handoff
+
+The live-DNS safety layer is implemented, unit-tested, and wired into both the
+CLI and web API. It has **not** yet completed an authorized end-to-end field
+run, so this is implementation status rather than evidence of live yield.
+
+| Area | Current state | Primary code |
+|---|---|---|
+| Scope input | ASCII DNS-name validation; generated candidates remain beneath the submitted apex | `subfury/dns_validation.py:normalize_domain` |
+| Authorization | `--authorized` is mandatory for CLI DNS; the web UI requires an acknowledgement | `subfury/predict.py`, `webui/app.py`, `webui/static/index.html` |
+| Operational budget | One thread-safe query cap and QPS limiter covers records, wildcard controls and recursion rounds | `subfury/dns_validation.py:QueryBudget` |
+| DNS evidence | A, AAAA and CNAME answers plus NXDOMAIN, NODATA, SERVFAIL, timeout and error outcomes | `subfury/dns_validation.py:resolve_with_evidence` |
+| Wildcards | Two random controls by default at the apex and each relevant nested parent zone; stable matches are excluded and unmatched rotating-wildcard answers remain inconclusive | `subfury/dns_validation.py:_classify` |
+| Recursion | Only `resolved` non-wildcard names are promoted; definitive answers are cached, while transient failures can retry | `subfury/predict.py:run`, `webui/app.py:run_pipeline` |
+| Audit output | CLI can retain all DNS questions and controls with `--evidence-out`; UI events retain typed answers and aggregate outcomes | `subfury/predict.py`, `webui/app.py` |
+| Automated checks | 11 deterministic resolver tests pass without network access | `tests/test_dns_validation.py` |
+
+Re-run the current checks before changing resolver behavior:
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m py_compile \
+  subfury/dns_validation.py subfury/predict.py webui/app.py \
+  tests/test_dns_validation.py
+git diff --check
+```
+
+The tests use a fake resolver. They establish classification, caching and hard
+budget behavior, but do not establish behavior against a recursive resolver or
+the complete model/UI stack. A fresh checkout also needs the ignored model
+checkpoint at `results/subfury/best.pt`; retrieval experiments additionally
+need their ignored checkpoints and grouped JSONL datasets.
+
+#### Next agent: first authorized smoke test
+
+Do this before adding a scheduler or making a live-yield claim:
+
+1. Install the declared dependencies and provide `results/subfury/best.pt` from
+   the existing authorized artifact source. Record its SHA-256 hash and the
+   Python, PyTorch, dnspython and resolver versions.
+2. Choose an apex the operator owns or is explicitly authorized to enumerate.
+   Freeze the known-label input, permitted record types, resolver, query cap,
+   QPS, recursion depth, start time and stop condition before the run.
+3. Start with a deliberately small cap and write the evidence ledger:
+
+```bash
+python3 subfury/predict.py <authorized-apex> \
+  --known known.txt --topn 25 --max-recursion 2 \
+  --authorized --query-budget 200 --max-qps 10 \
+  --evidence-out results/authorized-smoke.json
+```
+
+4. Manually inspect every promoted hostname and every wildcard/inconclusive
+   classification. Compare a sample with `dig` or `dnsx`; if HTTP probing is
+   authorized, record it separately rather than changing DNS status.
+5. Report candidates generated, actual DNS questions, status counts, unique
+   non-wildcard resolutions, queries per resolution, elapsed time and results
+   by recursion round. Retain negative and timeout outcomes.
+
+The smoke test passes only if the process never exceeds its query cap, every
+live question is represented in the ledger, wildcard or inconclusive names are
+never promoted, final results retain their A/AAAA/CNAME type, and CLI totals
+agree with the ledger. Treat a zero-discovery run as a valid result. Stop and
+fix the resolver path if accounting differs; do not compensate by increasing
+the budget.
+
+After that smoke test, the next product work is candidate/source provenance and
+an equal-budget comparison of beam search against fixed frequency, wordlist and
+observed-pattern allocations. A4 is a separate offline research task and is
+still blocked by missing compatible data and checkpoints.
+
+---
+
+## Real-world enumeration workflow (research-backed design, partially implemented)
+
+The job is to find **new, in-scope, independently validated hostnames per unit
+of allowed query budget**. A DNS answer, a web service, and a useful new asset
+are different outcomes. Keep them separate in the output and in evaluation.
+This workflow is our proposed product direction, not a claim that the current
+model has achieved it.
+
+| Stage | Operator action / future system behavior | Output and decision |
+|---|---|---|
+| Scope and budget | Record authorized apexes, excluded names, permitted DNS and HTTP activity, resolver choice, query cap, and stop time. Keep each apex separate. | A run plan; no out-of-scope candidate is probed. |
+| Passive seeds | Import existing recon results or gather from CT and passive-source tools; preserve source, retrieval time, and original hostname. Normalize, deduplicate, and verify suffix boundaries before using a name as context. | Known set `K`, including stale or unverified observations with their status intact. |
+| Baseline and predictions | Start with a fixed allocation within the global cap for a training-derived frequency prior, a small conventional wordlist, patterns derived from observed names, and SubFury. Use equal budgets when comparing channels experimentally. Deduplicate before DNS queries. | Candidate queue with method, rank, reason/provenance, and an explicit global query cap. |
+| DNS validation | Implemented: probe candidates at a controlled rate; record A, AAAA, CNAME, NXDOMAIN, NODATA, SERVFAIL and timeouts. Test random controls at the apex **and relevant nested zones** for wildcard behavior. Do not equate a DNS answer with a genuine service. | Resolved / probable wildcard / inconclusive / not resolved, with raw evidence. |
+| Service check | If authorized, probe confirmed hosts for HTTP(S) separately. An HTTP failure does not erase a valid DNS hostname; a web response does not by itself establish ownership or in-scope status. | DNS inventory and web inventory, each with its own evidence. |
+| Feedback and stopping | Add newly validated, non-wildcard, in-scope labels to `K`; rerank only after real new evidence. Stop when the cap is reached or the recent incremental yield no longer justifies another round. | New hosts and queries per new host, by round and method. |
+
+This order reflects how the toolkits divide responsibilities: [Subfinder's
+passive sources](https://docs.projectdiscovery.io/opensource/subfinder/usage)
+and [Amass passive enumeration](https://github.com/owasp-amass/amass/wiki/Tutorial)
+collect observations; [AlterX](https://docs.projectdiscovery.io/opensource/alterx/usage)
+creates patterns from existing names; [dnsx](https://docs.projectdiscovery.io/opensource/dnsx/running)
+resolves candidates and handles multi-level DNS wildcards; and
+[httpx](https://docs.projectdiscovery.io/opensource/httpx/running) probes web
+services. These are reference tools and possible interoperability points,
+not mandatory dependencies or features already integrated into SubFury.
+Passive-source results can be stale, and Amass explicitly distinguishes passive
+discovery from DNS validation. dnsx documents why wildcard filtering needs
+special handling. A hunter may choose different tools or skip stages according
+to scope and available budget.
+
+### The proposed ranking brain
+
+The existing evidence argues against assigning every query to one model.
+Beam search beats the fitted frequency prior at N=10 but loses at N=200;
+the retrieval experiments improve the tail but lose to beam search at small
+budgets, and the tested hybrid fusion does **not** beat its retrieval channel.
+So start with independent, measured channels rather than shipping that broken
+fusion scorer. An eventual scheduler should:
+
+1. Keep the best candidates from each channel, remove known names and duplicates,
+   and charge the budget once per distinct DNS question. Preserve all proposing
+   channels as provenance instead of claiming a hit belongs to only one.
+2. Use the established offline harness for comparisons, then measure **marginal
+   confirmed discoveries** on authorized real targets with equal query budgets.
+   Allocate more of a later round to a channel only when its measured additional
+   yield supports it; a fixed split is the reproducible initial control.
+3. Treat generic labels, organization-specific patterns, and nested labels as
+   different candidate families. Prefer observed naming conventions as *evidence*
+   for patterns; do not assume an LLM's plausible-looking string exists.
+4. Prevent recursive feedback from amplifying wildcard responses, resolver
+   errors, parked domains, or duplicate hosts. Preserve the original seed set
+   and the history of every promotion into `K`.
+
+**Research questions, not product facts:** whether larger `|K|` helps the
+retriever (A4); whether CT-trained models beat Common-Crawl-trained models on
+realistic targets (A6); whether a calibrated scheduler can beat each channel
+at the same DNS budget; and whether temporal CT evaluation predicts live
+incremental discoveries. The [preregistered falsifiers](research/METHODOLOGY.md)
+remain unchanged. The tracked CT sample contains 40 apexes and is not a
+representative training corpus or proof of real-world yield.
+
+### Minimum credible field evaluation before changing the default ranker
+
+Use only authorized targets and a written, fixed query budget. Freeze the
+passive seed snapshot, scope, candidate channels, resolver policy, wildcard
+controls, and stopping rule before comparing methods. On the **same targets**,
+measure incremental unique non-wildcard DNS hosts beyond the passive seed set,
+queries per discovery, time, false positives after manual review, and optional
+HTTP services separately. Count shared hits fairly, report yield by target and
+budget rather than only a pooled total, and retain negative and timeout
+outcomes. A temporal holdout tests whether later CT observations were
+predictable from earlier ones, but it does not replace live validation: CT
+visibility, DNS existence, and application liveness are different facts.
+
+Remaining implementation order: (1) complete the passive-source and candidate
+provenance ledger, (2) add equal-budget channel comparison, (3) add optional
+service classification, (4) adaptive scheduling only if it beats
+the fixed allocation on held-out engagements. Do not advertise improved live
+yield until the field evaluation produces it.
 
 ---
 
@@ -247,7 +412,7 @@ known labels  ──►  BPE  ──►  api [SEP] dev [SEP] staging [DELIM]
                                                       ▼
                                      app · support · docs · cdn · status …
                                                       │
-                                       concurrent DNS │ A-record lookups
+                                       budgeted DNS │ A / AAAA / CNAME
                                                       ▼
                                           resolved hits ──┐
                                                           │ appended to
@@ -267,8 +432,10 @@ for repeating its input, only for inferring what is missing.
 labels to spend a finite DNS budget on, not diverse ones. Already-known and
 syntactically invalid labels are dropped.
 
-**4. Resolve and recurse.** Surviving candidates are resolved concurrently, and
-confirmed hits rejoin the known set for the next round with strictly better context.
+**4. Resolve and recurse.** Surviving candidates get rate-limited A, AAAA and
+CNAME lookups under a hard cross-round query cap. Random controls test the apex
+and relevant nested zones for wildcard behavior. Only non-wildcard resolutions
+rejoin the known set; DNS existence is still not proof of a useful service.
 
 ### Is it really conditioning, or replaying a global list?
 

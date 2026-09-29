@@ -13,6 +13,144 @@ fusion scorer — and is recorded as such in §7.1 and §8.
 
 ---
 
+## Implementation and evaluation errata (2026-09-24)
+
+This note records limitations found by comparing the documented protocol with
+the tracked implementation. It **does not change** the seed-1337 harness,
+the historical JSON results, the A1–A6 axes, or any preregistered falsifier.
+Where the intended experiment is infeasible with the available artifacts, its
+status remains **not run**. No live-yield claim follows from an offline score.
+
+1. **A candidate budget is not a network-query budget.** The harness ranks N
+   strings without DNS. A live run may ask multiple record types, retry, send
+   wildcard controls, and recurse; its actual query count and elapsed time
+   must be recorded separately. The original `resolve_all` asked only for A
+   records and promoted any answer. The current live path records A, AAAA and
+   CNAME outcomes, enforces a cross-round query cap and QPS limit, checks random
+   controls at each relevant parent zone, and promotes only non-wildcard
+   resolutions. These are DNS observations, not proof of a useful independent
+   service; manual review and optional service checks remain separate.
+2. **A4 needs a feasible large-set population and model.** The preregistered
+   sizes remain 1/2/4/8/16/32/64/128. `data_prep.py` caps the main Common
+   Crawl test groups at 40 labels; the 545-apex harness has mean `|K|=8.48`.
+   The tracked `settrans-full` configuration sets `max_set=64`, and
+   `research/model/rank.py:_memory` truncates known labels to that limit.
+   Consequently the 128 condition cannot be tested on that checkpoint, and
+   the main capped test set cannot test large K at all. Preserve the per-apex
+   split and fixed H, report the eligible apex count at every K, and obtain
+   a suitable uncapped held-out cohort and a checkpoint capable of 128 before
+   interpreting the full preregistered curve. Do not declare a falsifier from
+   a model-imposed plateau or from apexes that never had that many known names.
+3. **Prior subtraction is present in training loss, absent from inference
+   ranking.** `SubFuryV3.loss` subtracts `prior_logits` when configured;
+   `V3Ranker._retrieve` calls `retrieve_scores` and sorts raw scores. The
+   reported `settrans-full` versus `settrans-noprior` numbers describe two
+   *trained checkpoints evaluated with raw-score inference*. They show a
+   difference associated with the training objective; they do not isolate
+   a prior-subtraction rule at inference. Re-scoring one frozen checkpoint
+   with and without the same stored prior would answer that distinct question.
+4. **The CT time field is a proxy.** `research/data/ct_fetch.py` stores the
+   earliest certificate `not_before` it retrieved as `first_seen`. This is
+   not a proof that the name appeared in a public log by that instant. The
+   temporal builder uses those proxy dates; its 21-apex output has three
+   records marked `truncated_history`. No tracked artifact scores a ranker
+   on this temporal set. A prospective CT evaluation needs an observation
+   snapshot actually captured by time T, or must label the result as a
+   retrospective issuance-date proxy and check sensitivity to truncation.
+5. **The current results are not fully reproducible from a fresh checkout.**
+   `.gitignore` excludes the grouped train/test JSONL and all `.pt`
+   checkpoints. The tracked score JSON and scripts document what was run, but
+   cannot regenerate the model comparisons by themselves. Record input hashes,
+   model hashes, tool versions, and an authorized way to obtain those inputs.
+
+For a real enumeration tool, the first engineering gate is a scope-aware
+passive-seed ledger and a controlled active DNS ledger with wildcard evidence.
+The first evidence gate is marginal new non-wildcard DNS hosts per actual query
+after passive seeds on authorized targets, with per-target results and a
+separate optional HTTP-service yield. Keep the Common Crawl harness as an
+offline diagnostic, and compare proposed live rankers against a fixed
+frequency/wordlist/pattern allocation at the same operational budget before
+shipping an adaptive fusion policy.
+
+### Implementation handoff (2026-09-30)
+
+The first active-DNS engineering gate is now implemented in
+`subfury/dns_validation.py` and integrated through `subfury/predict.py` and
+`webui/app.py`. This changes what can be tested, not what has been measured.
+There is still no tracked live-run artifact and therefore no live-yield result.
+
+**Implemented contract:**
+
+- explicit authorization acknowledgement before active DNS;
+- normalized submitted-apex input and syntactically valid relative labels that
+  remain beneath that apex;
+- one cross-round hard query cap plus a finite QPS limit;
+- typed A, AAAA and CNAME evidence with negative and transient outcomes kept;
+- random wildcard controls at the apex and every candidate's relevant parent
+  zone, cached across recursion rounds;
+- stable wildcard matches classified `probable_wildcard`; unmatched answers in
+  a rotating wildcard zone classified `inconclusive`; neither is promoted;
+- only `resolved` non-wildcard labels enter the next conditioning set;
+- definitive DNS outcomes cached across rounds, with timeout/SERVFAIL/error
+  outcomes eligible for retry while budget remains;
+- optional CLI JSON evidence via `--evidence-out`.
+
+`tests/test_dns_validation.py` has 11 network-free tests covering the hard cap,
+scope validation, nested zones, stable and rotating wildcards, typed CNAME
+display, cross-round caching, transient retry and invalid QPS values. The
+verification commands are:
+
+```bash
+python3 -m unittest discover -s tests -v
+python3 -m py_compile \
+  subfury/dns_validation.py subfury/predict.py webui/app.py \
+  tests/test_dns_validation.py
+git diff --check
+```
+
+These checks passed on 2026-09-30. They use a fake resolver and are not an
+end-to-end result. The current checkout does not contain the ignored
+`results/subfury/best.pt`, the grouped Common Crawl JSONL, or retrieval-model
+checkpoints, and its environment may still need the packages in
+`requirements.txt`. Do not describe the application as field-verified until an
+authorized runs exercise the actual checkpoint and resolver through the CLI,
+then separately verify the SSE stream and browser export.
+
+**Next execution gate:** run the fixed protocol below on an owned or explicitly
+authorized apex with a small budget before implementing adaptive scheduling.
+
+1. Freeze and hash the model, known-label file and configuration. Record the
+   resolver, software versions, allowed activity, start time and stop rule.
+2. Run `subfury/predict.py` with `--authorized`, an explicit `--query-budget`,
+   conservative `--max-qps`, and `--evidence-out`.
+3. Verify `queries_used <= query_budget`; reconcile every question with the
+   ledger; manually inspect all promoted, wildcard and inconclusive names.
+4. Report per round and per apex: candidates, actual questions, status counts,
+   unique non-wildcard resolutions, elapsed time and queries per resolution.
+5. Preserve zeroes, failures and timeouts. Keep optional HTTP service checks in
+   a separate table. A DNS answer is not a service and a service is not impact.
+
+The gate fails on any budget overrun, missing ledger entry, wildcard or
+inconclusive promotion, loss of record type, or disagreement between totals and
+raw evidence. A zero-hit run does not fail the machinery; it is evidence about
+the ranker on that target.
+
+**Ordered work after the gate:**
+
+1. Add a durable passive-seed and candidate provenance ledger. Keep all methods
+   that proposed a deduplicated candidate rather than assigning the hit to one.
+2. Implement a fixed equal-query allocation for beam, fitted frequency prior,
+   small wordlist and observed-name patterns on the same authorized targets.
+3. Add optional HTTP(S) classification only where explicitly permitted.
+4. Consider adaptive allocation only after it beats the frozen split on held-out
+   engagements. Do not tune it on the field-evaluation targets.
+
+This sequence does not replace A4. A4 remains the priority test of the research
+hypothesis, but it is blocked independently by the absent held-out dataset and
+a checkpoint that can consume all preregistered sizes through 128.
+
+---
+
 ## 1. Problem statement
 
 ### 1.1 Formalisation
@@ -26,12 +164,14 @@ A discovery process observes a subset `K ⊂ L(d)` — from passive sources: Com
 Transparency, passive DNS. `K` is **unordered**: it is a set of strings with no canonical sequence,
 no timestamps at query time, and no internal structure a sequence model could legitimately exploit.
 
-Given `K` and an integer **query budget** `N`, a method must emit an ordered list of `N` candidate
+Given `K` and an integer **offline candidate budget** `N`, a method must emit an ordered list of `N` candidate
 labels `C = (c₁, …, c_N)`, `cᵢ ∉ K`, chosen to maximise
 
     hits(C) = |{c ∈ C : c ∈ L(d) \ K}|
 
-Each candidate costs one DNS query (or one probe), so `N` is the real, budgeted resource. The two
+Each candidate occupies one evaluation slot. The live network cost can be
+higher because of retries, record types, wildcard controls, and recursion;
+see the errata above. The two
 metrics that follow are
 
     recall@N = |C ∩ H| / |H|              H = a held-out subset of L(d) \ K
@@ -279,15 +419,17 @@ vocabulary. Macro-averaged over apexes — which is the headline metric — the 
 held-out labels that exist in the training vocabulary is **57.58%** (recomputed from
 `data/groups_test.jsonl` + `data/groups_train.jsonl` under `research/harness.py`'s seed-1337 split).
 
-**57.6% is the hard ceiling on macro recall for any closed-vocabulary method** — every wordlist, the
-frequency prior, an *n*-gram model restricted to observed strings, and any retrieval-only channel. The
-remaining 42.4% is reachable only by open-vocabulary generation. That number is the entire
-justification for keeping a generator at all, and it should be printed at the top of every results
-table so no method is ever compared against 100%.
+**57.6% is the ceiling for a ranker restricted to this exact training-label
+vocabulary** — including the fitted frequency prior and a retrieval head whose
+candidates are drawn from it. It is not a ceiling for an external wordlist,
+the implemented character Markov generator, or other methods able to propose
+strings outside that vocabulary. The remaining 42.4% is out of reach for the
+restricted retriever; whether an open-vocabulary generator can find those
+labels efficiently is an empirical question, not a justification by itself.
 
 **75 of 545 apexes have zero held-out labels anywhere in the training vocabulary**
 (`results/research/baselines.json:reachable_subset` — 470 reachable, 75 excluded). They are
-unwinnable for any closed-vocabulary method and contribute a hard zero to its macro average. Scoring
+unwinnable for methods restricted to that training vocabulary and contribute a hard zero to their macro average. Scoring
 on the reachable subset (`reachable_table`):
 
 | method | r@10 | r@25 | r@50 | r@100 | r@200 | MAP |
@@ -371,10 +513,12 @@ must not be reported as one.** Any paper claiming a set-encoder win must show it
 *sorted-concatenation* baseline on identical data — which is what `encoder="concat"` in
 `research/model/model.py` exists to provide — and must expect the difference to be small.
 
-The residual, defensible version of the claim: the beam-search model's context is capped at 24 labels; deployment seeds
-reach 500–700; a set encoder removes that cap architecturally (`V3Config.max_set = 512`). That is an
-**engineering** justification with a measured cost of approximately zero at the sizes tested. Ship it,
-do not headline it.
+The residual, defensible engineering motivation: the beam-search model's
+context is capped at 24 labels and deployment seeds can reach 500–700. The
+set-encoder implementation can be configured to accept larger sets, but the
+tracked trained `settrans-full` run caps them at 64. The measured window test
+does not establish a benefit for 128 or 500 labels. Treat the larger-set
+capacity as a design goal pending a matching checkpoint and evaluation.
 
 ### 3.2 The replacement question
 
@@ -414,7 +558,7 @@ training loop, so an ablation moves exactly one variable.
 
 | Component | Config | The measurement that requires it |
 |---|---|---|
-| **Set encoder over unbounded `|K|`** (`deepsets` = mean/max pool; `settrans` = self-attention + learned-query pooling; `concat` = the beam-search model sorted-context baseline) | `encoder`, `max_set=512`, `n_seeds=4` | §2.3: the beam-search model sees 24 of up to 700 labels. Median window spread 0.000 says the cap is *currently* free — but the cap is why `|K|` cannot be a variable at all, and RQ1 needs it to be. `concat` exists so the comparison is against the beam-search model's actual conditioning, not a strawman. |
+| **Configurable set encoder** (`deepsets` = mean/max pool; `settrans` = self-attention + learned-query pooling; `concat` = a sorted-context control) | `encoder`, `max_set` (64 in the trained full runs; 512 is only the class default), `n_seeds=4` | §2.3: beam-search inference sees at most 24 labels. Larger-set support is a design motivation; its benefit is unmeasured. `concat` is specified as the control for A1 but has not been trained, and its exact equivalence to the shipped beam model has not been established. |
 | **Retrieval head** — scores a fixed candidate vocabulary against the org vector (`retrieve_scores`, `cand_vocab`) | `cand_vocab > 0` | §2.1: generation is flat past N=50 (0.207 → 0.217) while the prior climbs to 0.236 at N=200 and 0.274 on the reachable subset. Generation cannot fill a large budget; retrieval can — **confirmed by A2** (§7.1), which also **refuted** the second half of this rationale: §2.7's union-beats-both result did not survive, the fused hybrid scores at or below the retriever alone at every budget. |
 | **Generator head** — autoregressive over BPE, cross-attending set memory | always on | §2.6: **42.4%** of held-out labels are outside the training vocabulary. Retrieval alone is capped at 57.6% macro recall. Removing the generator forfeits that headroom. |
 | **Ranking loss against prior logits** — `s = s − prior_logits` before the contrastive term (`loss(..., prior_logits=...)`) | `lambda_rank` | §2.1 + §2.7: cross-entropy has no pressure to beat popularity; a model that perfectly learns `P(y)` scores well under CE and loses to the prior at N=200. Subtracting prior logits makes the objective *"score above popularity"* — the quantity §2.7 measures as `lift`, and the one the model is losing on. |
@@ -463,8 +607,9 @@ Every headline table carries, without exception:
    variance. Never compare against a wordlist alone (§2.1).
 2. **Macro and micro recall side by side.** Macro is the headline; micro reveals that both methods do
    worse on label-rich apexes (§2.6).
-3. **The reachable subset** (470/545) alongside the full set, with the 75 unwinnable apexes named as
-   such, and **57.6%** printed as the closed-vocabulary ceiling.
+3. **The training-vocabulary reachable subset** (470/545) alongside the full set,
+   with the 75 unreachable apexes identified for rankers limited to that
+   vocabulary, and **57.6%** printed as their vocabulary-specific ceiling.
 
 ### 5.4 The three diagnostics become standard reporting, not one-off investigations
 
@@ -490,10 +635,12 @@ across all certificates containing it. A split date `T` partitions:
     future = labels first seen > T        (the ground truth)
 
 Current build: **T = 2024-07-01**, `min_known=5`, `min_future=2`, **21 apexes**, 4,969 known and 1,996
-future labels. Nothing in `future` was visible in CT at time `T`, so a model conditioned on `known`
-cannot have had it in the conditioning set. This is a genuine before/after split, and per
-`research/related-work.md` §5 **no prior work in this space does one** — SubWiz publishes neither its
-corpus nor a date cutoff, so training-set contamination of its benchmark cannot be ruled out.
+future labels. This is a retrospective split by certificate issuance-date proxy,
+not a captured before/after observation snapshot. A label in `future` had no
+retrieved certificate with `not_before <= T`; that does not prove it was absent
+from public CT or another source at T. The model's Common Crawl training data
+is not timestamp-filtered at T either, so training contamination is not ruled
+out. See `research/related-work.md` §5 for the narrower literature comparison.
 
 The collection is **passive only**: `ct_fetch.py` reads public CT aggregators and never resolves DNS or
 contacts the target.
@@ -514,9 +661,10 @@ contacts the target.
   than 2017 — the entire recent half of its timeline missing. `build_temporal.py` propagates the flag
   and `--exclude-truncated` drops those apexes. Any temporal result must state whether it was used.
 - **One collection failure**: `sa-verdun.com` guard query returned HTTP 502 (`stats.guard_error`).
-- **`first_seen` is a lower bound on existence, not a birth date.** A host may run for years before it
-  is first put behind a certificate. The split measures *first public CT visibility*, and that phrase,
-  not "first existed", is what belongs in a paper.
+- **`first_seen` is an issuance-date proxy, not first CT visibility or a birth
+  date.** A host may run for years before it appears on a certificate, and an
+  issuance timestamp alone does not tell us when a log or this collector first
+  observed it. The exported field name is historical; report its actual meaning.
 - **n = 21 apexes.** Too small for a headline number. It is currently a *protocol demonstration*.
   `research/data/crawl_queue.txt` holds 299 further apexes for expansion.
 - **Domain shift.** The model is trained on Common Crawl (§2.4). Evaluating it on CT measures
@@ -526,10 +674,13 @@ contacts the target.
 
 ### 5.6 What is still missing from the protocol
 
-- **A live-resolution experiment.** Every prior hostname system resolves live
+- **A live-resolution experiment.** The budgeted, wildcard-aware evidence path
+  is implemented and unit-tested, but has not been run end to end on an
+  authorized target. Every prior hostname system resolves live
   (`research/related-work.md` §4). "Recall@N without DNS is not discovery" is the third-most-likely
   reviewer objection. At minimum: one authorised run reporting **queries per discovery**, comparable
-  to Marchal et al.'s ≈1/200 and Regulator's ≈1/100.
+  to Marchal et al.'s ≈1/200 and Regulator's ≈1/100, under the implementation
+  handoff gate above.
 - **SubWiz as a baseline, run by us.** It is pip-installable, MIT, weights public. Its absence will be
   noticed. Note the regime difference when doing so: SubWiz's benchmark has **median 5** seed
   hostnames across 369 apexes; our `min_labels=6` filter puts us in an easier regime, and that must be
@@ -553,9 +704,10 @@ cosmetic: it inverts the sign of an inference-time fix. Every number in §2 shou
 Common Crawl"*, and a CT-trained replication is the correct control, not an extension.
 
 **Ceiling.** 42.4% of held-out labels are outside the training vocabulary and 75/545 apexes are
-entirely unwinnable for closed-vocabulary methods (§2.6). Macro means are depressed by a floor of hard
-zeros that is a property of the corpus, not of the methods. Comparing any absolute recall figure
-against 100% is meaningless.
+entirely unreachable for methods restricted to this training-label vocabulary
+(§2.6). Their macro means include a floor of hard zeros; open-vocabulary
+methods do not share that specific ceiling. Absolute recall must be read in
+light of each method's candidate universe.
 
 **Statistical.** CIs are percentile bootstraps over apexes, which handles between-apex variance but
 not the two model-side sources: a single training run (no seed variance is reported anywhere in this
@@ -602,8 +754,11 @@ full §5.3 companion reporting. Order is by information gained per GPU-hour.
 | **A5** | Decoding | α ∈ {0, 0.6, 0.8, 1.0} × minlen ∈ {1, 2, 3} | **not run** on the retrieval model | Re-run of §2.5 on the new model. Does a corpus with a realistic short-label share change the answer? | If α>0 still hurts on Common Crawl but helps on CT, that is the corpus-mismatch finding confirmed, and it belongs in the paper. |
 | **A6** | Corpus | train on Common Crawl / train on CT / train on both | **not run** — CT corpus still being fetched | Isolates §2.4. Is the model's weakness the architecture or the training distribution? | CT-trained ≈ CC-trained on CT eval ⇒ the mismatch is not load-bearing and §2.4 is over-weighted here. |
 
-**A4 runs first if compute is scarce.** It is the cheapest — it needs no retraining, only re-evaluation
-at truncated `|K|` — and it is the only one that can falsify the project's premise rather than tune it.
+**A4 remains the priority scientific test.** Its preregistered 128-label arm
+cannot be completed with the current 64-label checkpoint or the capped main
+test set. Re-evaluation alone can cover only feasible smaller arms; the full
+test requires a suitable large-set checkpoint and held-out cohort, with the
+original per-apex split and falsifier preserved.
 
 
 ### 7.1 The four runs that have been executed
@@ -688,8 +843,8 @@ is also the cheapest by an order of magnitude.
   use case, and they say nothing about the operational failure that motivated
   the retrieval model.
 - **A4 has not been run.** The `|K|` curve is the test that can falsify §3.2,
-  and no the retrieval model number here bears on it. the retrieval model currently has an unbounded set encoder
-  whose benefit over one label is unmeasured.
+  and none of the retrieval-model numbers here bears on it. The trained model
+  accepts at most 64 known labels, and its benefit over one label is unmeasured.
 - No the retrieval model number here was produced against live DNS, CT, or a temporal split.
 
 ---
@@ -726,9 +881,11 @@ is also the cheapest by an order of magnitude.
 
 **Resolved by the A1/A2/A3 runs (§7.1)**
 
-6. **Is saturation an objective problem or an architecture problem?** Partly the objective: the
-   prior-relative ranking loss is worth +0.077 recall@200 over the same architecture without it
-   (0.260 against 0.180 on the retriever arm). But the generator saturates in the retrieval model exactly as it did
+6. **Is saturation an objective problem or an architecture problem?** The
+   prior-adjusted training run exceeds the no-prior training run by 0.077
+   recall@200 on the retriever arm (0.260 versus 0.180), both scored through
+   raw-logit inference. This is an association under the ablation, not an
+   inference-time prior-subtraction result. The generator saturates in the retrieval model as it did
    in the beam-search model, so the *decoder* half of the saturation is architectural and the fix was to stop asking a
    decoder to fill a 200-slot budget.
 7. **Does the hybrid beat its channels?** No. A2's kill criterion fired; see §7.1. Question 4 below
@@ -736,7 +893,7 @@ is also the cheapest by an order of magnitude.
 
 **Falsifiers — stated in advance, so the result is not renegotiated after it arrives**
 
-- **A4 shows a flat `|K|` curve for the retrieval model.** If a set encoder with unbounded `|K|`, a prior-relative
+- **A4 shows a flat `|K|` curve for the retrieval model.** If a set encoder able to see the full tested `|K|`, a prior-relative
   ranking loss, and a retrieval channel *still* gets 90% of its benefit from one label, then the
   hypothesis in §3.2 is wrong: the information is not in the set. The correct conclusion is that a
   well-fitted global prior plus a small generative channel for the top-50 is the right system, and the

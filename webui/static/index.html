@@ -309,7 +309,7 @@ label,.lbl{font-weight:500;font-size:12.5px;color:var(--fg-2);letter-spacing:-.0
 /* ── budget ───────────────────────────────────────── */
 .bhead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .bhead .lbl{margin-right:auto}
-.b3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.b3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .b3 .field+.field{margin-top:0}
 .bwhy{display:flex;gap:9px;margin-top:14px;padding:11px 12px;border-radius:var(--r-sm);
   background:var(--ok-dim);border:1px solid var(--ok-line);
@@ -1282,6 +1282,8 @@ td .io{font-family:var(--mono);font-size:12px;color:var(--fg-3)}
                 <input class="inp" type="number" id="beams" value="64" min="8" max="256" step="8"></div>
               <div class="bfield"><label for="rec">Rounds</label>
                 <input class="inp" type="number" id="rec" value="3" min="1" max="10"></div>
+              <div class="bfield"><label for="queryBudget">DNS queries</label>
+                <input class="inp" type="number" id="queryBudget" value="930" min="1" max="100000" step="10"></div>
             </div>
             <p class="bwhy" id="bwhy"><span id="bwhyTxt">Add known labels and Auto will size the search from them.</span></p>
           </div>
@@ -1297,6 +1299,11 @@ td .io{font-family:var(--mono);font-size:12px;color:var(--fg-3)}
             <p class="dnsnote" id="dnsNote">
               <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-alert"/></svg>
               <span>Sends live queries. Only against domains you are authorized to test.</span></p>
+            <label class="switch" for="authorized">
+              <input type="checkbox" id="authorized">
+              <span class="track"></span>
+              <span class="txt">I confirm this apex is authorized and in scope</span></label>
+            <p class="ferr" id="authErr" role="alert" hidden></p>
           </div>
           </div>
         </div>
@@ -1369,13 +1376,13 @@ td .io{font-family:var(--mono);font-size:12px;color:var(--fg-3)}
       <section class="verdict" id="rVerdict"></section>
 
       <section class="sec" id="s4">
-        <h2>Subdomains found<span class="meta" id="s4meta">confirmed by A record</span></h2>
+        <h2>Subdomains found<span class="meta" id="s4meta">non-wildcard DNS resolution</span></h2>
         <div class="secbody flush">
           <div class="empty" id="e4">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-dns"/></svg>
-            <p>Hosts that resolve appear here the moment they are confirmed.</p></div>
+            <p>Non-wildcard DNS resolutions appear here with their evidence.</p></div>
           <div class="scroll"><table hidden id="t4" aria-label="Resolved subdomains">
-            <thead><tr><th>Subdomain</th><th>A record</th><th class="num">Round</th></tr></thead>
+            <thead><tr><th>Subdomain</th><th>DNS answer</th><th class="num">Round</th></tr></thead>
             <tbody id="b4"></tbody></table></div>
         </div>
       </section>
@@ -2166,20 +2173,22 @@ function autoBudget() {
     + `famil${fam===1?'y':'ies'} — ${variety > 0.8 ? 'varied, so exploring wider'
       : variety < 0.4 ? 'repetitive, so keeping the sweep tight' : 'a normal spread'}. `
     + (dns ? `${rounds} rounds of DNS recursion.` : 'DNS off, so a single pass.');
-  return {cand, beam, rounds, why};
+  const queries = Math.min(100000, cand * rounds * 3 + 30);
+  return {cand, beam, rounds, queries, why};
 }
 function applyBudget() {
   const b = autoBudget();
   if (budgetMode === 'auto') {
     $('topn').value = b.cand; $('beams').value = b.beam; $('rec').value = b.rounds;
+    $('queryBudget').value = b.queries;
     $('bwhy').className = 'bwhy'; $('bwhyTxt').innerHTML = b.why;
   } else {
     $('bwhy').className = 'bwhy man';
     $('bwhyTxt').innerHTML = 'Manual — your numbers are used as entered. '
       + `Auto would pick <b>${b.cand}</b> candidates, <b>${b.beam}</b> beam, `
-      + `<b>${b.rounds}</b> round${b.rounds===1?'':'s'}.`;
+      + `<b>${b.rounds}</b> round${b.rounds===1?'':'s'}, and <b>${b.queries}</b> DNS queries.`;
   }
-  ['topn','beams','rec'].forEach(i => $(i).disabled = budgetMode === 'auto');
+  ['topn','beams','rec','queryBudget'].forEach(i => $(i).disabled = budgetMode === 'auto');
   renderKnown();
 }
 function setMode(mode) {
@@ -2191,7 +2200,7 @@ function setMode(mode) {
 $('mAuto').onclick = () => setMode('auto');
 $('mManual').onclick = () => { setMode('manual'); $('topn').focus(); };
 $('resolve').addEventListener('change', applyBudget);
-['topn','beams','rec'].forEach(id => $(id).addEventListener('input', renderKnown));
+['topn','beams','rec','queryBudget'].forEach(id => $(id).addEventListener('input', renderKnown));
 
 /* ── conditioning review ────────────────────────────── */
 function renderKnown() {
@@ -2788,7 +2797,7 @@ async function run() {
   const domain = $('domain').value.trim().toLowerCase().replace(/^https?:\/\//,'');
   const known = knownLabels();
   $('domain').setAttribute('aria-invalid', String(!domain));
-  fieldErr('domainErr', ''); fieldErr('knownErr', '');
+  fieldErr('domainErr', ''); fieldErr('knownErr', ''); fieldErr('authErr', '');
   if (!domain || !domainOk(domain)) {
     show('run'); $('domain').focus();
     fieldErr('domainErr', domain ? 'That is not an apex domain. Use the zone itself, like acme.com.'
@@ -2798,6 +2807,11 @@ async function run() {
   if (!known.length) {
     show('run'); $('knownAdd').focus();
     fieldErr('knownErr', 'Add at least one subdomain you already know — the prediction is built from them. Passive seed can find them for you.');
+    return;
+  }
+  if ($('resolve').checked && !$('authorized').checked) {
+    show('run'); $('authorized').focus();
+    fieldErr('authErr', 'Confirm that this apex is authorized and in scope before sending DNS queries.');
     return;
   }
 
@@ -2811,6 +2825,7 @@ async function run() {
   const auto = autoBudget();
   const cfg = {candidates: +$('topn').value, beam_width: +$('beams').value,
                rounds: +$('rec').value, dns: $('resolve').checked,
+               query_budget: +$('queryBudget').value,
                budget_mode: budgetMode,
                auto_reason: $('bwhyTxt').textContent.trim()};
   journeyStart(domain, cfg);
@@ -2837,7 +2852,8 @@ async function run() {
       headers:{'Content-Type':'application/json'}, signal: ctrl.signal,
       body: JSON.stringify({domain, known, topn:+$('topn').value,
         num_beams:+$('beams').value, resolve:$('resolve').checked,
-        max_recursion:+$('rec').value})});
+        max_recursion:+$('rec').value, query_budget:+$('queryBudget').value,
+        authorized:$('authorized').checked})});
     if (!res.ok) throw new Error('server returned ' + res.status);
     const rd = res.body.getReader(), dec = new TextDecoder(); let buf = '';
     for (;;) {
@@ -2978,13 +2994,15 @@ function handle(ev, d) {
     log(`${d.items.length} candidates generated`);
   }
   else if (ev === 'hit') {
-    hits.push({fqdn:d.fqdn, ip:d.ip, round:d.round});
+    hits.push({fqdn:d.fqdn, answer:d.answer, answer_type:d.answer_type,
+               answers:d.answers || [d.answer], status:d.status || 'resolved',
+               round:d.round});
     $('e4').style.display = 'none'; $('t4').hidden = false;
     const label = d.fqdn.slice(0, d.fqdn.length - curDomain.length - 1);
     roundHits.push(label);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td class="host"><mark>${esc(label)}</mark>.${esc(curDomain)}</td>
-      <td class="ip">${esc(d.ip)}</td><td class="num">${d.round}</td>`;
+      <td class="ip">${esc(d.answer_type)} ${esc(d.answer)}</td><td class="num">${d.round}</td>`;
     $('b4').appendChild(tr);
     setMetric('kHits', hits.length.toLocaleString()); setMetric('rmHits', hits.length.toLocaleString());
     $('navHits').textContent = hits.length;
@@ -2992,12 +3010,12 @@ function handle(ev, d) {
     const hr = document.createElement('div');
     hr.className = 'rrow hit';
     hr.innerHTML = `<span class="nm"><mark>${esc(label)}</mark>.${esc(curDomain)}</span>
-      <span class="ip">${esc(d.ip)}</span>`;
+      <span class="ip">${esc(d.answer_type)} ${esc(d.answer)}</span>`;
     $('rmHitList').appendChild(hr);
     $('rmHitList').scrollTop = $('rmHitList').scrollHeight;
     $('rhitMeta').textContent = `${hits.length} found`;
     flowSet(3, 'on', hits.length + ' resolved');
-    log(`resolved  ${d.fqdn} → ${d.ip}`,'ok');
+    log(`resolved  ${d.fqdn} → ${d.answer_type} ${d.answer}`,'ok');
   }
   else if (ev === 'round_done') {
     tested += d.tested;
@@ -3009,10 +3027,11 @@ function handle(ev, d) {
     railState(3,'done', hits.length + ' resolved');
     railState(4, d.new ? 'active' : 'done', `round ${d.round}: +${d.new}`);
     if (journey) {
-      // hosts are the product of the run: every one is kept, with its IP
+      // hosts are the product of the run: every one is kept with typed DNS evidence
       stageClose('dns', {resolved: hits.length, tested,
                          elapsed_ms: d.elapsed_ms ?? null,
-                         hosts: hits.map(h => ({fqdn: h.fqdn, ip: h.ip, round: h.round}))},
+                          hosts: hits.map(h => ({fqdn: h.fqdn, answer: h.answer,
+                                                answer_type: h.answer_type, round: h.round}))},
                  d.module);
       const rc = stageOpen('recurse', 'webui/app.py:run_pipeline');
       const rounds = (rc.output && rc.output.rounds) || [];
@@ -3026,6 +3045,8 @@ function handle(ev, d) {
     $('b5').appendChild(tr);
     roundStrip(d);
     log(`round ${d.round} complete · ${d.new} new of ${d.tested} tested`);
+    if (d.queries_used != null)
+      log(`DNS budget · ${d.queries_used} used · ${d.queries_remaining} remaining`);
   }
   else if (ev === 'done') {
     // DNS off: the backend goes straight to done, so stage 4 never gets a real
@@ -3107,7 +3128,7 @@ function renderSummary() {
     </div>`;
   bindExports();
   $('s4meta').textContent = hits.length
-    ? `${fmt(hits.length)} confirmed by A record` : 'confirmed by A record';
+    ? `${fmt(hits.length)} non-wildcard DNS resolutions` : 'non-wildcard DNS resolution';
 }
 
 /* ── export ─────────────────────────────────────────
@@ -3134,7 +3155,8 @@ function bindExports() {
       model:{params:model?.params, architecture:model?.architecture},
       candidates_tested:tested, results:hits}, null, 2), 'application/json');
   c.onclick = () => dl(curDomain + '-subfury.csv',
-    'subdomain,ip,round\n' + hits.map(h => `${h.fqdn},${h.ip},${h.round}`).join('\n'),
+    'subdomain,answer_type,answer,round\n'
+      + hits.map(h => `${h.fqdn},${h.answer_type},${h.answer},${h.round}`).join('\n'),
     'text/csv');
 }
 
@@ -3195,8 +3217,10 @@ function renderHist() {
     r.results.forEach(h => {
       const lab = h.fqdn.slice(0, h.fqdn.length - r.domain.length - 1);
       const tr = document.createElement('tr');
+      const answer = h.answer || h.ip || '';
+      const answerType = h.answer_type ? h.answer_type + ' ' : '';
       tr.innerHTML = `<td class="host"><mark>${esc(lab)}</mark>.${esc(r.domain)}</td>
-        <td class="ip">${esc(h.ip)}</td><td class="num">${h.round}</td>`;
+        <td class="ip">${esc(answerType)}${esc(answer)}</td><td class="num">${h.round}</td>`;
       $('b4').appendChild(tr);
     });
     setMetric('kHits', r.hits);
@@ -3371,8 +3395,8 @@ const M_NODES = [
   {id:'dns', lane:'run', kind:'code', ico:'i-dns', t:'4 · DNS resolve',
    s:'Asks the internet which guesses actually exist.',
    why:'Everything before this is a prediction. This is the only step that produces facts — and the only step that sends traffic anywhere near your target, which is why it is the one thing you can switch off.',
-   detail:'Each candidate is looked up concurrently and kept only if it has an A record. <b>Only run this against domains you are authorized to test.</b>',
-   aff:["look up concurrently", "keep the A records", "the only live traffic"], io:[['reads','candidate labels'],['hands on','confirmed hostnames + IPs']]},
+   detail:'Candidates receive budgeted A, AAAA and CNAME lookups plus parent-zone wildcard controls. Only non-wildcard resolutions recurse. <b>Only run this against domains you are authorized to test.</b>',
+   aff:["rate-limit DNS", "exclude wildcard matches", "the only live traffic"], io:[['reads','candidate labels'],['hands on','typed DNS evidence']]},
 
   {id:'rec', lane:'run', kind:'code', ico:'i-recurse', t:'5 · Recurse',
    s:'Feeds what it found back in and asks again.',

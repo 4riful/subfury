@@ -104,7 +104,7 @@ def main():
     print("=" * 66)
     print("STAGE 6 — what happens next (predict.py, not run here)")
     print("=" * 66)
-    print("  queued labels -> concurrent DNS A-record lookups")
+    print("  queued labels -> budgeted DNS A / AAAA / CNAME evidence")
     print("  resolved hits -> appended to the known set -> back to STAGE 3")
     print("  (recursion, up to --max-recursion rounds)")
 
