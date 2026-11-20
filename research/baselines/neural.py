@@ -21,9 +21,9 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_V2 = os.path.join(REPO_ROOT, "subfury")
-if _V2 not in sys.path:
-    sys.path.insert(0, _V2)
+_SUBFURY = os.path.join(REPO_ROOT, "subfury")
+if _SUBFURY not in sys.path:
+    sys.path.insert(0, _SUBFURY)
 
 DEFAULT_MODEL_DIR = os.path.join(REPO_ROOT, "results", "subfury")
 DEFAULT_CACHE = os.path.join(REPO_ROOT, "results", "research", "cache",

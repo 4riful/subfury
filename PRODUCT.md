@@ -162,9 +162,9 @@ the n0kovo wordlist alone, and was produced by `subfury/evaluate.py`, whose
 K/H split comes from one sequential `random.Random(seed)` applied in iteration
 order — it changes with `--max-apexes`, the min-label filter and file order, so
 numbers from different runs of it are not comparable. **Do not quote it.** The
-web UI still reads this file (`webui/app.py` → `MODEL_DIR/eval.json`); repointing
-it at `results/research/baselines.json` is outstanding work, and until then the
-Model tab shows a superseded comparison.
+web UI's Model tab now reports the shared evaluation from
+`results/research/baselines.json`; it reads `eval.json` only as an explicitly
+labelled wordlist-only fallback when that research artifact is absent.
 
 ### Measured — conditioning is real, and shallow
 

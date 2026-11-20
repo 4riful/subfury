@@ -19,7 +19,7 @@ import time
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "subfury"))
 
@@ -46,15 +46,23 @@ def get_model():
 
 class PredictRequest(BaseModel):
     domain: str
-    known: list[str] = []
-    topn: int = 100
-    num_beams: int = 64
+    known: list[str] = Field(default_factory=list)
+    topn: int = Field(default=100, ge=10, le=1000)
+    num_beams: int = Field(default=64, ge=8, le=256)
     resolve: bool = True
-    max_recursion: int = 3
+    max_recursion: int = Field(default=3, ge=1, le=10)
     query_budget: int = 1000
     max_qps: float = 50.0
     wildcard_probes: int = 2
     authorized: bool = False
+
+    @field_validator("domain")
+    @classmethod
+    def valid_domain(cls, value: str) -> str:
+        domain = _seed_valid(value)
+        if not domain:
+            raise ValueError("not a valid apex domain")
+        return domain
 
 
 def sse(event: str, data: dict) -> str:
@@ -388,7 +396,7 @@ def model_card():
 
 
 class TokenizeRequest(BaseModel):
-    known: list[str] = []
+    known: list[str] = Field(default_factory=list)
 
 
 @app.post("/api/tokenize")
